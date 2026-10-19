@@ -39,3 +39,39 @@ jobs:
 
       - name: Verify repository
         run: pnpm verify
+
+  native-transactions:
+    name: Transaction regressions (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, macos-15]
+    steps:
+      - name: Preserve LF source files
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify native transaction locks
+        run: >-
+          pnpm exec vitest run
+          apps/desktop/src/utilities/project-transaction.test.ts
+          apps/desktop/src/utilities/project-transaction/lock.windows.test.ts

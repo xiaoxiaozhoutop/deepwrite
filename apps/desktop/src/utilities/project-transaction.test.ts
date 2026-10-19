@@ -21,6 +21,7 @@ import {
 } from "./project-transaction";
 
 import { acquireProjectTransactionLock } from "./project-transaction/lock";
+import { secureProjectRoot } from "./project-transaction/io";
 
 // Real project transactions need a disk integration budget on Windows runners.
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
@@ -214,7 +215,8 @@ describe("project transaction", () => {
   });
 
   it("does not unlink an ABA replacement that reuses the same lock owner data", async () => {
-    const root = await temporaryProject();
+    // Internal lock helpers require the canonical root used by transaction entry points.
+    const root = await secureProjectRoot(await temporaryProject());
     const lockPath = join(root, ".deepwrite", "transaction.lock");
     // Acquisition has fully published and closed the lock before replacement.
     // Exercise release ownership directly instead of racing 1,000 durable writes.
