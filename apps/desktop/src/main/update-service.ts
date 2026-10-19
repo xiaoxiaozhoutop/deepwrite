@@ -1,5 +1,8 @@
 import { app, net } from "electron";
-import { autoUpdater, type ProgressInfo } from "electron-updater";
+import {
+  autoUpdater as nativeAutoUpdater,
+  type ProgressInfo
+} from "electron-updater";
 import {
   UPDATE_MANIFEST_URL,
   UpdateManifestSchema,
@@ -8,6 +11,9 @@ import {
   type UpdateState
 } from "@deepwrite/contracts";
 import { compareVersions } from "./update-version";
+import { createUpdateServiceUpdater } from "./arch-package-updater";
+
+const autoUpdater = createUpdateServiceUpdater(nativeAutoUpdater);
 
 type UpdateStateListener = (state: UpdateState) => void;
 
