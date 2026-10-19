@@ -49,6 +49,13 @@ const diskConversationTests = [
 const diskProjectTests = [
   "apps/desktop/src/utilities/project-transaction.test.ts",
   "apps/desktop/src/utilities/long-project-catalog.version-metadata.test.ts",
+  "apps/desktop/src/utilities/long-project-catalog.no-follow.test.ts",
+  "apps/desktop/src/utilities/long-import-integration.test.ts",
+  "apps/desktop/src/utilities/long-project-store.no-version.test.ts",
+  "apps/desktop/src/utilities/long-workspace-recovery.test.ts",
+  "apps/desktop/src/utilities/long-workspace-service.read-path.test.ts",
+  "apps/desktop/src/utilities/long-workspace-service.test.ts",
+  "apps/desktop/src/utilities/write-claw-long-sync.test.ts",
   ...[
     "briefs",
     "chronicle-rewrite",
