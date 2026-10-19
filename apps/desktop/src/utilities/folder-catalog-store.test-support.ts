@@ -16,7 +16,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CatalogSnapshotSchema,
   catalogDraftBodyDocumentId,
@@ -29,6 +29,9 @@ import {
   FolderCatalogConflictError,
   FolderCatalogStore
 } from "./folder-catalog-store";
+
+// Catalog suites create real project trees and perform durable transactions.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const temporaryRoots = new Set<string>();
 const timestamp = "2026-07-19T01:02:03.000Z";

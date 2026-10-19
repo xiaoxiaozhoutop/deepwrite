@@ -41,9 +41,9 @@ jobs:
         run: pnpm verify
 
   native-transactions:
-    name: Transaction regressions (${{ matrix.os }})
+    name: Native verification (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -70,9 +70,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify native transaction locks
+      - name: Verify Windows repository before packaging
+        if: runner.os == 'Windows'
+        env:
+          DEEPWRITE_TEST_MAX_WORKERS: "4"
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: pnpm verify
+
+      - name: Verify native filesystem regressions
+        if: runner.os != 'Windows'
+        shell: bash
         run: >-
           pnpm exec vitest run
           apps/desktop/src/utilities/project-transaction.test.ts
           apps/desktop/src/utilities/long-project-duplicate.test.ts
+          apps/desktop/src/utilities/folder-catalog-store.*.test.ts
           apps/desktop/src/utilities/project-transaction/lock.windows.test.ts
