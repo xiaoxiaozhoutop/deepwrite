@@ -189,7 +189,6 @@ export async function readRegularFileOptionalWithIdentity(
       }
       throw error;
     }
-    assertContained(projectRoot, canonical);
     let pathInfo: BigIntStats;
     try {
       pathInfo = await lstat(path, { bigint: true });
@@ -207,6 +206,13 @@ export async function readRegularFileOptionalWithIdentity(
       if (options.pathRaceAsMissing) return undefined;
       throw new Error("项目事务目标在读取期间发生替换。");
     }
+    if (!pathInfo.isFile() || pathInfo.nlink !== 1n) {
+      if (options.pathRaceAsMissing) return undefined;
+      throw new Error("项目事务目标在读取期间不再是安全的普通文件。");
+    }
+    // A disappearing/replaced lock may resolve to a Windows deletion path.
+    // Verify the path still identifies our file before enforcing containment.
+    assertContained(projectRoot, canonical);
     const bytes = await handle.readFile();
     const after = await handle.stat({ bigint: true });
     const changedDuringRead =

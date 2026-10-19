@@ -44,6 +44,35 @@ const diskConversationTests = [
   )
 ];
 
+// These suites create real project trees and repeatedly commit durable ledgers.
+// Serialize them to avoid competing with one another and SQLite migrations.
+const diskProjectTests = [
+  "apps/desktop/src/utilities/project-transaction.test.ts",
+  "apps/desktop/src/utilities/long-project-catalog.version-metadata.test.ts",
+  ...[
+    "briefs",
+    "chronicle-rewrite",
+    "completion-recovery",
+    "creation-recovery",
+    "overview-recovery",
+    "process-recovery",
+    "quota-recovery",
+    "read-cache",
+    "registry-flow",
+    "service",
+    "shared-ref-recovery",
+    "source-version",
+    "usage-guard",
+    "evidence-validation",
+    "query",
+    "recovery",
+    "workflow-replanning"
+  ].map(
+    (name) =>
+      `apps/desktop/src/utilities/long-book-decomposition/${name}.test.ts`
+  )
+];
+
 const testFiles = [
   "packages/**/*.test.ts",
   "tools/**/*.test.mjs",
@@ -101,7 +130,8 @@ export default defineConfig({
           exclude: [
             ...configDefaults.exclude,
             scaleTest,
-            ...diskConversationTests
+            ...diskConversationTests,
+            ...diskProjectTests
           ],
           sequence: { groupOrder: 0 }
         }
@@ -120,10 +150,21 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          name: "disk-project",
+          include: diskProjectTests,
+          maxWorkers: 1,
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
+          sequence: { groupOrder: 2 }
+        }
+      },
+      {
+        extends: true,
+        test: {
           name: "scale",
           include: [scaleTest],
           maxWorkers: 1,
-          sequence: { groupOrder: 2 }
+          sequence: { groupOrder: 3 }
         }
       }
     ]
