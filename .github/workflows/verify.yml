@@ -74,6 +74,7 @@ jobs:
         if: runner.os == 'Windows'
         env:
           DEEPWRITE_TEST_MAX_WORKERS: "4"
+          DEEPWRITE_TEST_COLLECT_FAILURES: "1"
           NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm verify
 

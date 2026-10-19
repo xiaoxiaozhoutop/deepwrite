@@ -21,6 +21,7 @@ const diskConversationTests = [
   "apps/desktop/src/utilities/conversation-history-*.integration.test.mjs",
   "apps/desktop/src/utilities/conversation-long-prompt.integration.test.mjs",
   "apps/desktop/src/utilities/conversation-exit.test.mjs",
+  "apps/desktop/src/utilities/conversation-storage/profile-relocation.integration.test.mjs",
   "apps/desktop/src/utilities/renderer-state-store.test.ts",
   "tools/renderer-state-history-migration.test.mjs",
   ...[
@@ -79,7 +80,11 @@ export default defineConfig({
     maxWorkers,
     // A failed suite already blocks packaging; avoid running the slow
     // scale project afterwards just to report the same failed verification.
-    bail: process.env.CI === "true" ? 1 : 0,
+    bail:
+      process.env.CI === "true" &&
+      process.env.DEEPWRITE_TEST_COLLECT_FAILURES !== "1"
+        ? 1
+        : 0,
     globalSetup: ["./tools/setup-i18n-fixtures.ts"],
     setupFiles: ["./tools/setup-renderer-i18n.ts"],
     environment: "node",

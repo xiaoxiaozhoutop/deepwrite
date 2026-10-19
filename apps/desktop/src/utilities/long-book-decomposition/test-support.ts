@@ -1,6 +1,7 @@
 import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { vi } from "vitest";
 import {
   DEFAULT_DECOMPOSITION_PROFILE,
   LongBookDecompositionJobSchema,
@@ -12,6 +13,9 @@ import { LongBookAnalysisSourceStore } from "../../extras/agents/sources/long-bo
 import { LongWorkspaceService } from "../long-workspace-service";
 import { FolderCatalogStore } from "../folder-catalog-store";
 import { DecompositionService } from "./service";
+
+// These fixtures prepare real sources, target projects and durable job state.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 export async function decompositionFixture(
   mode: LongBookDecompositionJob["mode"],
