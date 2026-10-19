@@ -23,6 +23,8 @@ const diskConversationTests = [
   "apps/desktop/src/utilities/conversation-exit.test.mjs",
   "apps/desktop/src/utilities/conversation-storage/profile-relocation.integration.test.mjs",
   "apps/desktop/src/utilities/renderer-state-store.test.ts",
+  "apps/desktop/src/utilities/storage-migration.test.ts",
+  "apps/desktop/src/main/smoke-conversation.test.ts",
   "tools/renderer-state-history-migration.test.mjs",
   ...[
     "capacity",
