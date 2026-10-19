@@ -154,6 +154,8 @@ Only the publish job receives `contents: write` through the repository-provided 
 
 Use **Re-run failed jobs** on the original run to reuse successful platform artifacts and resume its upload draft. Existing matching assets are skipped; empty incomplete uploads are removed and retried only in that run's private draft. Conflicting files, public releases, and drafts belonging to another run are preserved. Failed uploads keep the draft private. If a tag has no run, choose `main` in **Run workflow** and enter the existing tag; all builds use its tagged commit. Release notes are generated automatically. GitHub selects Latest by semantic version, so an older build finishing later does not replace a newer release.
 
+If all four platform jobs pass and only publication fails, open **Actions → Build and publish tagged release → Run workflow** on `main`, enter the same tag, and set `reuse_run_id` to the original run ID. Recovery checks the source commit, successful platform verification, and complete unexpired artifacts before resuming the original draft. It uses publication tools from the selected workflow revision while keeping the tag pinned to the installer source; installers are not rebuilt.
+
 In-app updates still use the root `update.json`. Update it through the existing release-manifest process after the Release is public and every installer has been uploaded successfully; this workflow does not advance it early.
 
 ## Project Structure

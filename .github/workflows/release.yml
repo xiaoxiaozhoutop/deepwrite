@@ -10,6 +10,10 @@ on:
         description: Existing release tag (vMAJOR.MINOR.PATCH)
         required: true
         type: string
+      reuse_run_id:
+        description: Reuse verified installers from an earlier run (optional)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -27,8 +31,12 @@ jobs:
     if: ${{ !github.event.deleted }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       commit: ${{ steps.source.outputs.commit }}
+      reuse_run_id: ${{ steps.recovery.outputs.run_id }}
     steps:
       - name: Check out released source
         id: source
@@ -46,9 +54,52 @@ jobs:
       - name: Validate release tag and both package versions
         run: node tools/release-version.mjs
 
+      - name: Validate reusable installers
+        id: recovery
+        if: ${{ inputs.reuse_run_id != '' }}
+        uses: actions/github-script@v8
+        env:
+          REUSE_RUN_ID: ${{ inputs.reuse_run_id }}
+          RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
+        with:
+          script: |
+            const value = process.env.REUSE_RUN_ID;
+            const runId = Number(value);
+            if (!/^[1-9]\d*$/u.test(value) || !Number.isSafeInteger(runId)) {
+              throw new Error('Invalid installer run ID.');
+            }
+            const options = { ...context.repo, run_id: runId };
+            const { data: run } = await github.rest.actions.getWorkflowRun(options);
+            if (run.path !== '.github/workflows/release.yml' ||
+                run.status !== 'completed' ||
+                run.head_sha !== process.env.RELEASE_COMMIT) {
+              throw new Error('Installer run does not match the released source.');
+            }
+            const platforms = ['win-x64', 'mac-arm64', 'mac-x64', 'linux-x64'];
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...options, filter: 'latest', per_page: 100
+            });
+            for (const platform of platforms) {
+              const matches = jobs.filter(job => job.name === `Package ${platform}`);
+              if (matches.length !== 1 || matches[0].status !== 'completed' ||
+                  matches[0].conclusion !== 'success') {
+                throw new Error(`Installer verification did not pass: ${platform}`);
+              }
+            }
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, { ...options, per_page: 100 });
+            const installers = artifacts.filter(artifact => artifact.name.startsWith('installers-'));
+            if (installers.length !== platforms.length || platforms.some(platform => {
+              const matches = installers.filter(artifact => artifact.name === `installers-${platform}`);
+              return matches.length !== 1 || matches[0].expired || matches[0].size_in_bytes <= 0;
+            })) {
+              throw new Error('Verified installer artifacts are incomplete or expired.');
+            }
+            core.setOutput('run_id', String(runId));
+
   package:
     name: Package ${{ matrix.id }}
     needs: prepare
+    if: ${{ !needs.prepare.outputs.reuse_run_id }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -183,17 +234,20 @@ jobs:
   upload:
     name: Publish verified release installers
     needs: [prepare, package]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && (needs.package.result == 'success' || (needs.prepare.outputs.reuse_run_id != '' && needs.package.result == 'skipped')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write
+      actions: read
     env:
       RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
+      RELEASE_BUILD_RUN: ${{ needs.prepare.outputs.reuse_run_id }}
     steps:
-      - name: Check out validated release commit
+      - name: Check out publication tooling
         uses: actions/checkout@v6
         with:
-          ref: ${{ needs.prepare.outputs.commit }}
+          ref: ${{ needs.prepare.outputs.reuse_run_id && github.sha || needs.prepare.outputs.commit }}
           persist-credentials: false
 
       - name: Set up Node.js
@@ -220,9 +274,18 @@ jobs:
           pattern: installers-*
           path: release-input
           merge-multiple: false
+          run-id: ${{ needs.prepare.outputs.reuse_run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Verify checksums and merge macOS update manifests
-        run: node tools/prepare-release-assets.mjs release-input release-upload
+        run: |
+          node --input-type=module <<'NODE'
+          import { prepareReleaseAssets } from './tools/prepare-release-assets.mjs';
+          const files = await prepareReleaseAssets(
+            'release-input', 'release-upload', process.env.RELEASE_TAG.slice(1)
+          );
+          console.log(`RELEASE_ASSETS_OK count=${files.length}`);
+          NODE
 
       - name: Upload to draft and publish verified installers
         uses: actions/github-script@v8
@@ -235,7 +298,7 @@ jobs:
             const url = await publishTagRelease({
               github, repo: context.repo, tag: process.env.RELEASE_TAG,
               commit: process.env.RELEASE_COMMIT,
-              runId: context.runId,
+              runId: process.env.RELEASE_BUILD_RUN || context.runId,
               directory: path.resolve('release-upload')
             });
             await core.summary.addLink('Download release installers', url).write();

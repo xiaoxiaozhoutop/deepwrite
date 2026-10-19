@@ -8,7 +8,7 @@ async function assertTagCommit({ github, repo, tag, commit }) {
   // does not pin an existing tag when creating a release.
   const { data } = await github.rest.repos.getCommit({
     ...repo,
-    ref: `tags/${tag}`
+    ref: `refs/tags/${tag}`
   });
   if (data.sha !== commit) {
     throw new Error("Release 标签对应的提交已改变，拒绝公开本轮安装包。");
@@ -157,7 +157,7 @@ export async function uploadReleaseAssets({
   return release.html_url;
 }
 
-/** A rerun keeps its run ID, so only that run may resume its upload draft. */
+/** Only the validated build run may resume its upload draft. */
 export async function publishTagRelease({
   github,
   repo,
