@@ -1,9 +1,12 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LongLedgerCommitRecordSchema } from "@deepwrite/contracts";
 import { LongProjectStore } from "./long-project-store";
+
+// Creating, committing and copying real projects needs a disk integration budget.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const NOW = "2026-08-05T09:00:00.000Z";
 const roots: string[] = [];

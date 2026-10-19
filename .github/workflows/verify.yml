@@ -74,4 +74,5 @@ jobs:
         run: >-
           pnpm exec vitest run
           apps/desktop/src/utilities/project-transaction.test.ts
+          apps/desktop/src/utilities/long-project-duplicate.test.ts
           apps/desktop/src/utilities/project-transaction/lock.windows.test.ts

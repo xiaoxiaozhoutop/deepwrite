@@ -219,6 +219,7 @@ jobs:
             apps/desktop/src/utilities/material-query-service.test.ts \
             apps/desktop/src/utilities/project-transaction/lock.windows.test.ts \
             apps/desktop/src/utilities/project-transaction.test.ts \
+            apps/desktop/src/utilities/long-project-duplicate.test.ts \
             apps/desktop/src/utilities/conversation-storage/legacy-replay-recovery.test.ts \
             apps/desktop/src/utilities/conversation-storage/legacy-migration-relocation.test.ts \
             apps/desktop/src/utilities/book-identity/commands.test.ts \
