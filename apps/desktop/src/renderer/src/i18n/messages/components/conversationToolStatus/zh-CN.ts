@@ -51,6 +51,7 @@ export default {
   moveCharacterEntry: "移动人物条目",
   deleteCharacterFile: "删除人物文件",
   webSearch: "联网搜索",
+  webFetch: "读取网页",
   write: "写入",
   edit: "修改",
   couldNotGenerateManuscriptReview: "正文审核生成失败",

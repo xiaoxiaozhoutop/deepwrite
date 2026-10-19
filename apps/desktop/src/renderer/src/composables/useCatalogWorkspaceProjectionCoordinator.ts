@@ -18,6 +18,7 @@ import type { CatalogProjectionReconcileResult } from "./useCatalogDocumentLoade
 import { longBookIdFromResourceId } from "../types/longWorkspace";
 import type { EditorDraftState, WorkspaceDocument } from "../types/workspace";
 import { reconcileCatalogRecoveryDrafts } from "../utils/catalogDraftRecoveryReconciliation";
+import { catalogCharacterSelectionFallback } from "../utils/catalogCharacterSelectionFallback";
 import { hasDirtyLegacyDraftRecoveries } from "../utils/legacyDraftRecoveryDetection";
 import type { LegacyDraftRecoveryMigrationResult } from "../utils/legacyDraftRecovery";
 
@@ -293,11 +294,17 @@ export function useCatalogWorkspaceProjectionCoordinator(
       selectedBeforeCommit &&
       !selectionExists(pair.projection, selectedBeforeCommit)
     ) {
-      selectedAfterCommit = fallbackResourceId(
-        pair.projection,
-        selectedWorkspaceAnchor,
-        reconciliation.documents
-      );
+      selectedAfterCommit =
+        catalogCharacterSelectionFallback(
+          previousProjection,
+          pair.projection,
+          selectedBeforeCommit
+        ) ??
+        fallbackResourceId(
+          pair.projection,
+          selectedWorkspaceAnchor,
+          reconciliation.documents
+        );
       options.state.selectedResourceId.value = selectedAfterCommit;
     }
 
@@ -310,6 +317,11 @@ export function useCatalogWorkspaceProjectionCoordinator(
         selectedAfterCommit
       );
       options.state.activeCreationResourceId.value =
+        catalogCharacterSelectionFallback(
+          previousProjection,
+          pair.projection,
+          activeBeforeCommit
+        ) ??
         (activeWorkspaceAnchor
           ? resolvePreferredBookResourceId(
               pair.projection,

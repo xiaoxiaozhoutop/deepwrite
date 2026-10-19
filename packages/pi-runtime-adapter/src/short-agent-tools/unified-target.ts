@@ -95,7 +95,11 @@ function resolveCharacterTarget(
     );
   }
   const item = sharedState.characterItems.get(id);
-  if (!item) throw new Error(`不存在人物条目 ${id}。`);
+  if (!item) {
+    throw new Error(
+      `不存在人物条目 ${id}。请用 read（kind=workspace，id=workspace）查询最新人物 id，不要用人名代替 id。`
+    );
+  }
   return {
     kind: "character",
     id: item.id,
@@ -134,16 +138,31 @@ function resolveDraftTarget(
   };
 }
 
-export function resolveWritingMutationKind(
-  kind: ShortUnifiedTargetKind | undefined,
-  document: ShortUnifiedDocument | undefined
+export function resolveWritingEditKind(
+  sharedState: ShortWorkspaceToolSharedState,
+  request: {
+    kind?: ShortUnifiedTargetKind;
+    id: string;
+    document?: ShortUnifiedDocument;
+    meta?: { title?: string };
+  }
 ): ShortUnifiedTargetKind {
-  if (kind !== undefined) return kind;
-  if (document === "body" || document === "character_state") {
+  if (request.kind !== undefined) return request.kind;
+  if (request.document === "body" || request.document === "character_state") {
+    return "draft_section";
+  }
+  const id = request.id.trim();
+  if (
+    request.meta?.title !== undefined &&
+    sharedState.expertSections.has(id) &&
+    !sharedState.characterItems.has(id) &&
+    !sharedState.plotStages.has(id) &&
+    id !== "character_design"
+  ) {
     return "draft_section";
   }
   throw new Error(
-    "省略 kind 时必须指定 document=body 或 character_state，并提供稳定小节 id。"
+    "无法确定修改对象。正文修改省略 kind 时必须指定 document=body 或 character_state；小节改名请提供 kind=draft_section、稳定小节 id 和 meta.title，无需 document。"
   );
 }
 

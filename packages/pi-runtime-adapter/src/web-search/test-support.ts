@@ -1,6 +1,8 @@
 import type { WebSearchRuntimeConfig } from "@deepwrite/contracts";
 import { WebSearchRateLimiter } from "./rate-limiter";
 import type {
+  WebFetchRequest,
+  WebPage,
   WebSearchHit,
   WebSearchProviderClient,
   WebSearchRequest
@@ -36,22 +38,58 @@ export function hit(
   };
 }
 
+export function page(index: number, overrides: Partial<WebPage> = {}): WebPage {
+  return {
+    title: `网页 ${index}`,
+    url: `https://example.test/page/${index}`,
+    content: `# 网页 ${index}\n\n正文 ${index}`,
+    ...overrides
+  };
+}
+
 export type Step =
   | WebSearchHit[]
   | Error
   | ((request: WebSearchRequest) => Promise<WebSearchHit[]>);
 
-/** A client that plays its steps in order and remembers what it was asked. */
+export type PageStep =
+  WebPage | Error | ((request: WebFetchRequest) => Promise<WebPage>);
+
+/**
+ * A client that plays its steps in order and remembers what it was asked. It
+ * can read pages only when page steps are given.
+ */
 export function scriptedClient(
-  steps: Step[]
-): WebSearchProviderClient & { requests: WebSearchRequest[] } {
+  steps: Step[],
+  pageSteps?: PageStep[]
+): WebSearchProviderClient & {
+  requests: WebSearchRequest[];
+  pageRequests: WebFetchRequest[];
+} {
   const requests: WebSearchRequest[] = [];
+  const pageRequests: WebFetchRequest[] = [];
   let next = 0;
+  let nextPage = 0;
   return {
     id: "deepseek",
     maxQps: 5,
     queryHint: "测试语法提示。",
     requests,
+    pageRequests,
+    ...(pageSteps
+      ? {
+          fetch: {
+            maxQps: 5,
+            async page(request) {
+              pageRequests.push(request);
+              const step =
+                pageSteps[Math.min(nextPage++, pageSteps.length - 1)]!;
+              if (step instanceof Error) throw step;
+              return typeof step === "function" ? step(request) : step;
+            }
+          }
+        }
+      : {}),
     async search(request) {
       requests.push(request);
       const step = steps[Math.min(next++, steps.length - 1)]!;

@@ -137,6 +137,7 @@ describe("DeepWrite Pi runtime adapter: workspace-prompts", () => {
     });
     expect(disabledPrompt).not.toContain("【联网搜索】");
     expect(disabledPrompt).not.toContain("web_search");
+    expect(disabledPrompt).not.toContain("web_fetch");
 
     const enabledPrompt = buildEffectiveSystemPrompt("DeepWrite base", {
       runId: "run_short_search_on",
@@ -158,9 +159,12 @@ describe("DeepWrite Pi runtime adapter: workspace-prompts", () => {
     });
     expect(switchedOffPrompt).not.toContain("【联网搜索】");
     expect(switchedOffPrompt).not.toContain("web_search");
+    expect(switchedOffPrompt).not.toContain("web_fetch");
     expect(enabledPrompt).toContain("【联网搜索】");
-    expect(enabledPrompt).toContain("联网查证公开资料使用 web_search");
-    expect(enabledPrompt).toContain("网络能力仅限 web_search");
+    expect(enabledPrompt).toContain(
+      "联网查证公开资料使用 web_search、web_fetch"
+    );
+    expect(enabledPrompt).toContain("网络能力仅限 web_search 与 web_fetch");
     expect(enabledPrompt).not.toContain("DeepSeek 服务端");
   });
 

@@ -1,112 +1,140 @@
-import type {
-  LongWorkspaceFileReference,
-  LongWorkspaceIndexSnapshot,
-  LongWorkspaceOperation
+import {
+  applyLongWorkspaceOperations,
+  type LongWorkspaceFileReference,
+  type LongWorkspaceIndexSnapshot,
+  type LongWorkspaceOperation
 } from "@deepwrite/contracts";
-import { maxOrder } from "./shared";
+import { allEntityIds } from "./shared";
 
 export interface OverlayDocument {
   content: string;
   file: LongWorkspaceFileReference;
 }
 
-function chapterById(index: LongWorkspaceIndexSnapshot, chapterCardId: string) {
-  return index.chapters.find((entry) => entry.chapterCardId === chapterCardId);
+type Creation = Extract<LongWorkspaceOperation, { type: `${string}.create` }>;
+
+function isCreation(operation: LongWorkspaceOperation): operation is Creation {
+  return operation.type.endsWith(".create");
 }
 
-function applyStructure(
+function createdId(operation: Creation): string | undefined {
+  switch (operation.type) {
+    case "worldbuilding.create":
+      return operation.category.id;
+    case "worldbuildingItem.create":
+      return operation.item.id;
+    case "characterType.create":
+      return operation.characterType.id;
+    case "character.create":
+      return operation.character.id;
+    case "volume.create":
+      return operation.volume.id;
+    case "arc.create":
+      return operation.arc.id;
+    case "storyPlot.create":
+      return operation.storyPlot.id;
+    case "chapter.create":
+      return operation.chapterCard.id;
+    case "event.create":
+      return operation.event.id;
+    case "connection.create":
+      return operation.connection.id;
+    case "placement.create":
+      return operation.placement.id;
+    case "foreshadowing.create":
+      return operation.thread.id;
+    case "foreshadowingBeat.create":
+      return operation.beat.id;
+    case "chapterContinuity.worldReveals.create":
+    case "chapterContinuity.character.create":
+      return undefined;
+  }
+}
+
+function alreadyCreated(
   index: LongWorkspaceIndexSnapshot,
-  operation: LongWorkspaceOperation
-): void {
-  if (operation.type === "chapter.create") {
-    if (
-      index.plot.chapterCards.some(({ id }) => id === operation.chapterCard.id)
-    ) {
-      return;
-    }
-    index.plot.chapterCards.push(structuredClone(operation.chapterCard));
-    if (
-      !index.chapters.some(
-        ({ chapterCardId }) => chapterCardId === operation.chapterCard.id
-      )
-    ) {
-      index.chapters.push(structuredClone(operation.files));
-    }
-    return;
-  }
-  if (operation.type === "storyPlot.create") {
-    if (
-      index.plot.storyPlots.some(({ id }) => id === operation.storyPlot.id) ||
-      !index.plot.arcs.some(({ id }) => id === operation.storyPlot.arcId)
-    ) {
-      return;
-    }
-    const storyPlot = structuredClone(operation.storyPlot);
-    storyPlot.order =
-      maxOrder(
-        index.plot.storyPlots
-          .filter((candidate) => candidate.arcId === storyPlot.arcId)
-          .map(({ order }) => order)
-      ) + 1;
-    index.plot.storyPlots.push(storyPlot);
-    return;
-  }
+  operation: Creation,
+  knownIds: ReadonlySet<string>
+): boolean {
+  const id = createdId(operation);
+  if (id) return knownIds.has(id);
   if (operation.type === "chapterContinuity.worldReveals.create") {
-    const chapter = chapterById(index, operation.chapterCardId);
-    if (chapter && !chapter.worldReveals) {
-      chapter.worldReveals = structuredClone(operation.file);
-    }
-    return;
+    return index.chapters.some(
+      (chapter) =>
+        chapter.chapterCardId === operation.chapterCardId &&
+        chapter.worldReveals !== null
+    );
   }
-  if (operation.type !== "chapterContinuity.character.create") return;
-  const chapter = chapterById(index, operation.chapterCardId);
-  if (!chapter) return;
-  if (
-    chapter.characterContinuity.some(
-      (entry) => entry.characterId === operation.characterId
-    )
-  ) {
-    return;
+  if (operation.type === "chapterContinuity.character.create") {
+    return index.chapters.some(
+      (chapter) =>
+        chapter.chapterCardId === operation.chapterCardId &&
+        chapter.characterContinuity.some(
+          (entry) => entry.characterId === operation.characterId
+        )
+    );
   }
-  chapter.characterContinuity.push({
-    characterId: operation.characterId,
-    currentState: structuredClone(operation.currentState),
-    history: structuredClone(operation.history)
-  });
+  return false;
+}
+
+/** Secondary files are created empty even when only the primary body is supplied. */
+function initialFiles(operation: Creation): LongWorkspaceFileReference[] {
+  if (operation.type === "character.create") {
+    return [operation.files.coreProfile, operation.files.relationships];
+  }
+  if (operation.type === "chapter.create") {
+    const files = operation.files;
+    return [
+      files.card,
+      files.body,
+      files.characterState,
+      files.handoff,
+      files.foreshadowingChanges
+    ];
+  }
+  return [];
 }
 
 function patchFile(
   index: LongWorkspaceIndexSnapshot,
   file: LongWorkspaceFileReference
 ): void {
-  const replace = (
-    current: LongWorkspaceFileReference | null | undefined
-  ): LongWorkspaceFileReference | null | undefined =>
-    current?.id === file.id ? file : current;
-
-  for (const chapter of index.chapters) {
-    chapter.body = replace(chapter.body) ?? chapter.body;
-    chapter.card = replace(chapter.card) ?? chapter.card;
-    chapter.characterState =
-      replace(chapter.characterState) ?? chapter.characterState;
-    chapter.handoff = replace(chapter.handoff) ?? chapter.handoff;
-    chapter.foreshadowingChanges =
-      replace(chapter.foreshadowingChanges) ?? chapter.foreshadowingChanges;
-    chapter.worldReveals =
-      replace(chapter.worldReveals) ?? chapter.worldReveals;
-    for (const entry of chapter.characterContinuity) {
-      entry.currentState = replace(entry.currentState) ?? entry.currentState;
-      entry.history = replace(entry.history) ?? entry.history;
+  const replace = (current: LongWorkspaceFileReference) =>
+    current.id === file.id ? file : current;
+  index.bookLine = replace(index.bookLine);
+  if (index.characterOverview)
+    index.characterOverview = replace(index.characterOverview);
+  for (const category of index.worldbuilding) {
+    if (category.format === "text") category.file = replace(category.file);
+    else {
+      if (category.overview) category.overview = replace(category.overview);
+      for (const item of category.items) item.file = replace(item.file);
     }
   }
-  for (const storyPlot of index.plot.storyPlots) {
-    storyPlot.file = replace(storyPlot.file) ?? storyPlot.file;
+  for (const character of index.characterFiles) {
+    character.coreProfile = replace(character.coreProfile);
+    character.relationships = replace(character.relationships);
   }
+  for (const chapter of index.chapters) {
+    chapter.body = replace(chapter.body);
+    chapter.card = replace(chapter.card);
+    chapter.characterState = replace(chapter.characterState);
+    chapter.handoff = replace(chapter.handoff);
+    chapter.foreshadowingChanges = replace(chapter.foreshadowingChanges);
+    if (chapter.worldReveals)
+      chapter.worldReveals = replace(chapter.worldReveals);
+    for (const entry of chapter.characterContinuity) {
+      entry.currentState = replace(entry.currentState);
+      entry.history = replace(entry.history);
+    }
+  }
+  for (const storyPlot of index.plot.storyPlots)
+    storyPlot.file = replace(storyPlot.file);
 }
 
 /** Same-run view of proposals that have not necessarily landed in Core yet. */
 export function createProposalOverlay() {
-  const structure: LongWorkspaceOperation[] = [];
+  const structure: Creation[] = [];
   const documents = new Map<string, OverlayDocument>();
 
   return {
@@ -115,25 +143,34 @@ export function createProposalOverlay() {
       writes: readonly OverlayDocument[]
     ): void {
       for (const operation of operations) {
-        if (
-          operation.type === "chapter.create" ||
-          operation.type === "chapterContinuity.worldReveals.create" ||
-          operation.type === "chapterContinuity.character.create" ||
-          operation.type === "storyPlot.create"
-        ) {
-          structure.push(operation);
+        if (!isCreation(operation)) continue;
+        structure.push(structuredClone(operation));
+        for (const file of initialFiles(operation)) {
+          if (!documents.has(file.id))
+            documents.set(file.id, { content: "", file });
         }
       }
-      for (const write of writes) {
-        documents.set(write.file.id, write);
-      }
+      for (const write of writes) documents.set(write.file.id, write);
     },
     applyToIndex(
       index: LongWorkspaceIndexSnapshot
     ): LongWorkspaceIndexSnapshot {
       if (structure.length === 0 && documents.size === 0) return index;
-      const next = structuredClone(index);
-      for (const operation of structure) applyStructure(next, operation);
+      const knownIds = allEntityIds(index);
+      const operations = structure.filter((operation) => {
+        if (alreadyCreated(index, operation, knownIds)) return false;
+        const id = createdId(operation);
+        if (id) knownIds.add(id);
+        return true;
+      });
+      // Apply once for the whole overlay, using Core's ordering/reference rules.
+      const next = operations.length
+        ? applyLongWorkspaceOperations(index, {
+            updatedAt: index.updatedAt,
+            operations,
+            documentWrites: []
+          }).snapshot
+        : structuredClone(index);
       for (const write of documents.values()) patchFile(next, write.file);
       return next;
     },

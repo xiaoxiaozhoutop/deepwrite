@@ -1,5 +1,16 @@
 import type { ResourceTreeNode, ResourceTreeSection } from "../types/workspace";
 
+export function resourceTreeContainsResource(
+  nodes: readonly ResourceTreeNode[],
+  resourceId: string
+): boolean {
+  return nodes.some(
+    (node) =>
+      node.id === resourceId ||
+      resourceTreeContainsResource(node.children ?? [], resourceId)
+  );
+}
+
 export interface ResourceTreeLookup {
   nodeById: ReadonlyMap<string, ResourceTreeNode>;
   resourceIdByDocumentId: ReadonlyMap<string, string>;

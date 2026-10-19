@@ -14,7 +14,10 @@ const NOTICES: Record<WebSearchFailureKind, string> = {
   timeout: "连接联网搜索服务超时，请检查网络后重试。",
   bad_request: "联网搜索服务拒绝了这次请求，请检查查询词。",
   unavailable: "联网搜索服务暂时不可用，请稍后重试。",
-  invalid_response: "联网搜索服务返回了无法识别的内容。"
+  invalid_response: "联网搜索服务返回了无法识别的内容。",
+  // Only a page read meets these two; the test search cannot.
+  blocked: "联网搜索服务拒绝了这次请求，请稍后重试。",
+  no_content: "联网搜索服务没有返回可用内容，请稍后重试。"
 };
 
 const networkFetch: typeof fetch = (input, init) =>

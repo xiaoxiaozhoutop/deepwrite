@@ -34,6 +34,9 @@ const TOOL_ACTIVITY: Readonly<Record<string, string>> = {
   get web_search() {
     return t("webSearch");
   },
+  get web_fetch() {
+    return t("webFetch");
+  },
   get switch_storyline_stage() {
     return t("switchStage");
   },

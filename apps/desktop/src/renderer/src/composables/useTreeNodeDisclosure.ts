@@ -1,15 +1,6 @@
 import { computed, ref, watch, type Ref } from "vue";
 import type { ResourceTreeNode } from "../types/workspace";
-
-function containsSelectedDescendant(
-  node: ResourceTreeNode,
-  selectedId: string
-): boolean {
-  return (node.children ?? []).some(
-    (child) =>
-      child.id === selectedId || containsSelectedDescendant(child, selectedId)
-  );
-}
+import { resourceTreeContainsResource } from "../utils/resourceTreeLookup";
 
 export function useTreeNodeDisclosure(
   node: () => ResourceTreeNode,
@@ -27,9 +18,10 @@ export function useTreeNodeDisclosure(
       selection &&
       current.children?.length &&
       ((current.selectableBranch && current.id === selection) ||
-        containsSelectedDescendant(current, selection))
+        resourceTreeContainsResource(current.children, selection))
     );
   });
+  let selectionWasContained = false;
 
   watch(
     [
@@ -37,8 +29,24 @@ export function useTreeNodeDisclosure(
       containsSelection,
       () => options.selectionActive?.value ?? true
     ],
-    ([, contains, active]) => {
-      if (contains && active) open.value = true;
+    ([selection, contains, active], [previousSelection, , wasActive]) => {
+      const current = node();
+      const replacingRemovedSelection = Boolean(
+        wasActive &&
+        selectionWasContained &&
+        previousSelection &&
+        selection !== previousSelection &&
+        previousSelection !== current.id &&
+        !resourceTreeContainsResource(current.children ?? [], previousSelection)
+      );
+      // The refreshed tree can publish before its fallback selection. Remember
+      // membership until the selection changes so a manual collapse survives.
+      selectionWasContained =
+        selection !== previousSelection
+          ? contains
+          : selectionWasContained || contains;
+      if (!contains || !active || replacingRemovedSelection) return;
+      open.value = true;
     },
     { immediate: true }
   );

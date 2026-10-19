@@ -1,8 +1,6 @@
-import { randomBytes } from "node:crypto";
 import {
   CLOUD_BACKUP_QUOTA_BYTES,
   CloudBackupApplyResultSchema,
-  CloudBackupPreviewSchema,
   CloudBackupStatusSchema,
   type CloudBackupApplyResult,
   type CloudBackupItemKind,
@@ -14,9 +12,9 @@ import {
   catalogOpenDomain,
   writeProjectFiles
 } from "./apply";
-import { listLocalBackupProjects } from "./catalog-reader";
+import { listLocalBackupProjects, toManifestItems } from "./catalog-reader";
 import { loadCloudBackupOssConfig } from "./config";
-import { countChanges, diffBackupItems } from "./diff";
+import { backupItemKey, countChanges, diffBackupItems } from "./diff";
 import { registerGroupInCatalogRegistry } from "./group-registry";
 import { CloudBackupIdentityStore, formatMachineKey } from "./identity";
 import {
@@ -24,14 +22,17 @@ import {
   type CloudBackupObjectStore
 } from "./oss-client";
 import {
-  extractProjectFiles,
+  readBackupSnapshot,
   packBackupSnapshot,
   parseSnapshotManifest,
   snapshotObjectKeys,
   type CloudBackupSnapshotManifest
 } from "./packager";
-
-const PREVIEW_TTL_MS = 10 * 60 * 1000;
+import {
+  assertRestorePreviewLocalCurrent,
+  CloudBackupPreviewStore,
+  type StoredBackupPreview
+} from "./previews";
 
 export interface CloudBackupServiceHooks {
   getWorkspaceDirectory(): Promise<string | null>;
@@ -42,24 +43,9 @@ export interface CloudBackupServiceHooks {
   registerLongBook(projectDirectory: string): Promise<void>;
 }
 
-interface StoredPreview {
-  id: string;
-  createdAt: number;
-  direction: "upload" | "download";
-  machineKey: string;
-  remoteUpdatedAt: string | null;
-  totalBytes: number;
-  changes: CloudBackupPreview["changes"];
-  packed?: { manifest: CloudBackupSnapshotManifest; zip: Buffer };
-}
-
-function previewId(): string {
-  return `preview_${randomBytes(8).toString("hex")}`;
-}
-
 export class CloudBackupService {
   private readonly identity: CloudBackupIdentityStore;
-  private readonly previews = new Map<string, StoredPreview>();
+  private readonly previews = new CloudBackupPreviewStore();
 
   constructor(
     private readonly userDataPath: string,
@@ -88,7 +74,7 @@ export class CloudBackupService {
   }
 
   async previewBackup(): Promise<CloudBackupPreview> {
-    const store = this.requireStore();
+    this.requireStore();
     const machineKey = await this.identity.getOrCreate(() => this.isoNow());
     const local = await listLocalBackupProjects(this.userDataPath);
     const packed = packBackupSnapshot(machineKey, this.isoNow(), local);
@@ -98,23 +84,19 @@ export class CloudBackupService {
       packed.manifest.items,
       remote?.items ?? []
     );
-    const preview = this.remember({
-      id: previewId(),
-      createdAt: Date.now(),
+    return this.previews.remember({
       direction: "upload",
       machineKey,
-      remoteUpdatedAt: remote?.updatedAt ?? null,
+      remote,
       totalBytes: packed.zip.length,
       changes,
       packed
     });
-    void store;
-    return this.toPreview(preview);
   }
 
   async applyBackup(rawPreviewId: string): Promise<CloudBackupApplyResult> {
     const store = this.requireStore();
-    const preview = this.takePreview(rawPreviewId, "upload");
+    const preview = this.previews.take(rawPreviewId, "upload");
     await this.assertRemotePreviewCurrent(preview);
     const packed = preview.packed;
     if (!packed) {
@@ -143,29 +125,21 @@ export class CloudBackupService {
       throw new Error("未找到该密钥的云端备份。");
     }
     const local = await listLocalBackupProjects(this.userDataPath);
-    const localItems = local.map(({ kind, id, title, hash, sizeBytes }) => ({
-      kind,
-      id,
-      title,
-      hash,
-      sizeBytes
-    }));
+    const localItems = toManifestItems(local);
     const changes = diffBackupItems("download", localItems, remote.items);
-    const preview = this.remember({
-      id: previewId(),
-      createdAt: Date.now(),
+    return this.previews.remember({
       direction: "download",
       machineKey,
-      remoteUpdatedAt: remote.updatedAt,
+      remote,
+      localItems,
       totalBytes: remote.sizeBytes,
       changes
     });
-    return this.toPreview(preview);
   }
 
   async applyRestore(rawPreviewId: string): Promise<CloudBackupApplyResult> {
     const store = this.requireStore();
-    const preview = this.takePreview(rawPreviewId, "download");
+    const preview = this.previews.take(rawPreviewId, "download");
     await this.assertRemotePreviewCurrent(preview);
     const workspaceDirectory = await this.hooks.getWorkspaceDirectory();
     if (!workspaceDirectory) {
@@ -177,17 +151,17 @@ export class CloudBackupService {
       throw new Error("云端备份文件不存在或已被删除。");
     }
     const local = await listLocalBackupProjects(this.userDataPath);
+    assertRestorePreviewLocalCurrent(preview, toManifestItems(local));
+    const projects = readBackupSnapshot(zip, preview.remote, preview.changes);
     const localByKey = new Map(
-      local.map((project) => [`${project.kind}:${project.id}`, project])
+      local.map((project) => [backupItemKey(project), project])
     );
     const now = this.isoNow();
     for (const change of preview.changes) {
       if (change.change !== "add" && change.change !== "overwrite") continue;
-      const files = extractProjectFiles(zip, change.kind, change.id);
-      if (files.length === 0) {
-        throw new Error(`云端备份缺少“${change.title}”的文件。`);
-      }
-      const existing = localByKey.get(`${change.kind}:${change.id}`);
+      const key = backupItemKey(change);
+      const files = projects.get(key)!;
+      const existing = localByKey.get(key);
       if (existing) {
         await writeProjectFiles(existing.projectDirectory, files, {
           replaceExisting: true
@@ -211,7 +185,7 @@ export class CloudBackupService {
       direction: "download",
       ...countChanges(preview.changes),
       sizeBytes: preview.totalBytes,
-      updatedAt: preview.remoteUpdatedAt ?? now
+      updatedAt: preview.remote?.updatedAt ?? now
     });
   }
 
@@ -252,46 +226,6 @@ export class CloudBackupService {
     return parseSnapshotManifest(JSON.parse(body.toString("utf8")) as unknown);
   }
 
-  private remember(preview: StoredPreview): StoredPreview {
-    this.expirePreviews();
-    this.previews.set(preview.id, preview);
-    return preview;
-  }
-
-  private takePreview(
-    id: string,
-    direction: StoredPreview["direction"]
-  ): StoredPreview {
-    this.expirePreviews();
-    const preview = this.previews.get(id);
-    if (!preview || preview.direction !== direction) {
-      throw new Error("同步预览已过期，请重新确认后再继续。");
-    }
-    this.previews.delete(id);
-    return preview;
-  }
-
-  private expirePreviews(): void {
-    const cutoff = Date.now() - PREVIEW_TTL_MS;
-    for (const [id, preview] of this.previews) {
-      if (preview.createdAt < cutoff) {
-        this.previews.delete(id);
-      }
-    }
-  }
-
-  private toPreview(preview: StoredPreview): CloudBackupPreview {
-    return CloudBackupPreviewSchema.parse({
-      previewId: preview.id,
-      direction: preview.direction,
-      machineKey: preview.machineKey,
-      remoteUpdatedAt: preview.remoteUpdatedAt,
-      totalBytes: preview.totalBytes,
-      quotaBytes: CLOUD_BACKUP_QUOTA_BYTES,
-      changes: preview.changes
-    });
-  }
-
   private requireStore(): CloudBackupObjectStore {
     if (!this.store) {
       throw new Error("当前环境未配置云端备份。");
@@ -300,11 +234,10 @@ export class CloudBackupService {
   }
 
   private async assertRemotePreviewCurrent(
-    preview: StoredPreview
+    preview: StoredBackupPreview
   ): Promise<void> {
     const current = await this.readRemoteManifest(preview.machineKey);
-    const currentUpdatedAt = current?.updatedAt ?? null;
-    if (currentUpdatedAt !== preview.remoteUpdatedAt) {
+    if (JSON.stringify(current) !== JSON.stringify(preview.remote)) {
       throw new Error("云端备份在预览后发生变化，请重新预览后再同步。");
     }
   }

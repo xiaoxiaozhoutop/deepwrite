@@ -1,19 +1,27 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { createScopedTranslator } from "../i18n";
-import { parseWebSearchSummary } from "../utils/webSearchSummary";
+import {
+  parseWebFetchSummary,
+  parseWebSearchSummary,
+  type WebSearchSource
+} from "../utils/webSearchSummary";
 
 const props = defineProps<{ summary: string }>();
 const t = createScopedTranslator("components.conversationProcessingItem");
 
-const sources = computed(() =>
-  parseWebSearchSummary(props.summary).sources.map((source) => ({
+// A search lists its results; a page read is one source of its own.
+const sources = computed(() => {
+  const found = parseWebSearchSummary(props.summary).sources;
+  const page = parseWebFetchSummary(props.summary);
+  const listed: WebSearchSource[] = found.length ? found : page ? [page] : [];
+  return listed.map((source) => ({
     ...source,
     origin:
       [source.site, source.date].filter(Boolean).join(" · ") ||
       new URL(source.url).hostname
-  }))
-);
+  }));
+});
 </script>
 
 <template>

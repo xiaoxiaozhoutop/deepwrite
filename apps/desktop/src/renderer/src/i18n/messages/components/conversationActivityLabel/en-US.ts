@@ -9,6 +9,7 @@ export default {
   askUser: "Ask user",
   commitContinuity: "Commit continuity",
   webSearch: "Web search",
+  webFetch: "Read web page",
   switchStage: "Switch stage",
   assigningTask: "Assigning task",
   searchContent: "Search content",

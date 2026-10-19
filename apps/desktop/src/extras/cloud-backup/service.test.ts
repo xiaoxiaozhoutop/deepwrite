@@ -7,6 +7,7 @@ import { CloudBackupService } from "./service";
 import type { CloudBackupObjectStore } from "./oss-client";
 import { CLOUD_BACKUP_QUOTA_BYTES } from "@deepwrite/contracts";
 import { packBackupSnapshot, snapshotObjectKeys } from "./packager";
+import { createZip, readZip } from "./zip";
 
 const roots: string[] = [];
 
@@ -98,6 +99,72 @@ function replaceRemoteSnapshot(store: MemoryStore, machineKey: string) {
 }
 
 describe("cloud backup service", () => {
+  it.each(["upload", "download"] as const)(
+    "rejects a changed manifest with an unchanged timestamp before %s",
+    async (direction) => {
+      const { service, store, machineKey } = await previewFixture();
+      const initial = await service.previewBackup();
+      await service.applyBackup(initial.previewId);
+      const preview =
+        direction === "upload"
+          ? await service.previewBackup()
+          : await service.previewRestore(machineKey);
+      const key = snapshotObjectKeys(machineKey).manifest;
+      const manifest = JSON.parse(store.objects.get(key)!.toString("utf8"));
+      manifest.items[0].hash = "0".repeat(64);
+      store.objects.set(key, Buffer.from(JSON.stringify(manifest)));
+      const upload = vi.spyOn(store, "putObject");
+
+      await expect(
+        direction === "upload"
+          ? service.applyBackup(preview.previewId)
+          : service.applyRestore(preview.previewId)
+      ).rejects.toThrow("云端备份在预览后发生变化");
+      expect(upload).not.toHaveBeenCalled();
+    }
+  );
+
+  it("preserves local changes made after a restore preview", async () => {
+    const { service, workspace, machineKey } = await previewFixture();
+    const upload = await service.previewBackup();
+    await service.applyBackup(upload.previewId);
+    const body = join(workspace, "books", "测试书", "body.md");
+    await writeFile(body, "预览前的本地内容。");
+    const preview = await service.previewRestore(machineKey);
+    const latest = "预览后继续编辑的新内容。";
+    await writeFile(body, latest);
+
+    await expect(service.applyRestore(preview.previewId)).rejects.toThrow(
+      "本地内容在预览后发生变化"
+    );
+    expect(await readFile(body, "utf8")).toBe(latest);
+  });
+
+  it("rejects archive content that no longer matches the preview before writing local files", async () => {
+    const { service, store, workspace, machineKey } = await previewFixture();
+    const upload = await service.previewBackup();
+    await service.applyBackup(upload.previewId);
+    const body = join(workspace, "books", "测试书", "body.md");
+    const latest = "本地尚未备份的内容。";
+    await writeFile(body, latest);
+    const preview = await service.previewRestore(machineKey);
+    const key = snapshotObjectKeys(machineKey).archive;
+    const files = readZip(store.objects.get(key)!);
+    files.set(
+      "items/book/book_test/body.md",
+      Buffer.from("不是预览中的远端内容。")
+    );
+    store.objects.set(
+      key,
+      createZip([...files].map(([name, data]) => ({ name, data })))
+    );
+
+    await expect(service.applyRestore(preview.previewId)).rejects.toThrow(
+      "备份文件与预览不一致"
+    );
+    expect(await readFile(body, "utf8")).toBe(latest);
+  });
+
   it("uploads a packed snapshot and restores it onto another workspace after confirm", async () => {
     const { userData, workspace } = await setupWorkspace();
     const store = new MemoryStore();

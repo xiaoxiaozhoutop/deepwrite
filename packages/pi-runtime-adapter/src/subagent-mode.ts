@@ -7,7 +7,11 @@ import {
   type SubagentDrawSettings
 } from "@deepwrite/contracts";
 import type { ContextPolicy } from "./kernel/context";
-import { WEB_SEARCH_TOOL_NAME } from "./web-search/tool";
+import {
+  WEB_FETCH_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+  WEB_TOOL_NAMES
+} from "./web-search/tool-names";
 import type {
   BuildSpawnSubagentToolInput,
   RuntimeSubagentDefinition
@@ -22,7 +26,8 @@ export const PURE_READ_TOOL_NAMES: ReadonlySet<string> = new Set([
   "read",
   "list",
   "query_linked_material_entries",
-  WEB_SEARCH_TOOL_NAME
+  WEB_SEARCH_TOOL_NAME,
+  WEB_FETCH_TOOL_NAME
 ]);
 
 /** Library managers own their tools and prompts, so they are never pure. */
@@ -58,7 +63,7 @@ export function applySubagentWebSearch(
 ): AgentTool[] {
   return subagentWebSearchAllowed(mode, mainEnabled)
     ? tools
-    : tools.filter((tool) => tool.name !== WEB_SEARCH_TOOL_NAME);
+    : tools.filter((tool) => !WEB_TOOL_NAMES.has(tool.name));
 }
 
 export function applySubagentAgentMode(
@@ -79,9 +84,11 @@ export function subagentModeSystemRequirements(
   mode: SubagentAgentMode
 ): string | undefined {
   if (mode === "pure-bare") return undefined;
-  return mode === "pure-read"
-    ? input.pureReadSystemPromptRequirements
-    : input.systemPromptRequirements;
+  const requirements =
+    mode === "pure-read"
+      ? input.pureReadSystemPromptRequirements
+      : input.systemPromptRequirements;
+  return typeof requirements === "function" ? requirements() : requirements;
 }
 
 /** A bare child must not get manuscript text re-attached after compaction. */

@@ -190,10 +190,10 @@ export interface BuildSpawnSubagentToolInput {
   streamFn: StreamFn;
   definitions: readonly RuntimeSubagentDefinition[];
   getParentMessages?: () => readonly AgentMessage[];
-  /** Runtime-owned requirements appended after the editable child role prompt. */
-  systemPromptRequirements?: string;
-  /** Read-only variant for `pure-read` children, without any write rules. */
-  pureReadSystemPromptRequirements?: string;
+  /** Runtime-owned requirements; factories resolve the live view at child startup. */
+  systemPromptRequirements?: string | (() => string);
+  /** Read-only variant, also resolved at child startup, without any write rules. */
+  pureReadSystemPromptRequirements?: string | (() => string);
   /** Material directory for ordinary team members, never library managers. */
   materialContext?: string;
   /**

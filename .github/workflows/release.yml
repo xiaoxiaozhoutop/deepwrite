@@ -54,6 +54,21 @@ jobs:
       - name: Validate release tag and both package versions
         run: node tools/release-version.mjs
 
+      - name: Record released source for recovery
+        if: ${{ inputs.reuse_run_id == '' }}
+        run: git rev-parse HEAD > release-source.txt
+
+      - name: Keep released source for recovery
+        id: source_record
+        if: ${{ inputs.reuse_run_id == '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-source-${{ steps.source.outputs.commit }}
+          path: release-source.txt
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
       - name: Validate reusable installers
         id: recovery
         if: ${{ inputs.reuse_run_id != '' }}
@@ -72,7 +87,7 @@ jobs:
             const { data: run } = await github.rest.actions.getWorkflowRun(options);
             if (run.path !== '.github/workflows/release.yml' ||
                 run.status !== 'completed' ||
-                run.head_sha !== process.env.RELEASE_COMMIT) {
+                !['push', 'workflow_dispatch'].includes(run.event)) {
               throw new Error('Installer run does not match the released source.');
             }
             const platforms = ['win-x64', 'mac-arm64', 'mac-x64', 'linux-x64'];
@@ -87,6 +102,19 @@ jobs:
               }
             }
             const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, { ...options, per_page: 100 });
+            // checkout pins the installer source; a manual run's head_sha is its workflow revision.
+            const sources = artifacts.filter(artifact => artifact.name.startsWith('release-source-'));
+            if (sources.length) {
+              if (sources.length !== 1 ||
+                  sources[0].name !== `release-source-${process.env.RELEASE_COMMIT}` ||
+                  sources[0].expired || sources[0].size_in_bytes <= 0) {
+                throw new Error('Installer source record is mismatched, incomplete or expired.');
+              }
+            } else if (run.event !== 'push' ||
+                       run.head_branch !== process.env.RELEASE_TAG ||
+                       run.head_sha !== process.env.RELEASE_COMMIT) {
+              throw new Error('Installer run does not match the released source; a source record is required for manual builds.');
+            }
             const installers = artifacts.filter(artifact => artifact.name.startsWith('installers-'));
             if (installers.length !== platforms.length || platforms.some(platform => {
               const matches = installers.filter(artifact => artifact.name === `installers-${platform}`);

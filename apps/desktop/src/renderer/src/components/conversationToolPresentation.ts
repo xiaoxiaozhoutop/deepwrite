@@ -34,8 +34,12 @@ export {
   workGroupActivityLabel
 } from "./conversationActivityLabel";
 export {
+  hasWebSources,
+  isWebFetchTool,
+  isWebSearchTool
+} from "./conversationWebTools";
+export {
   workspaceToolLabel,
-  isWebSearchTool,
   isWriteTool,
   writeToolAction,
   writeActionLabel,

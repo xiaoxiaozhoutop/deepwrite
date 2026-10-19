@@ -156,6 +156,8 @@ Use **Re-run failed jobs** on the original run to reuse successful platform arti
 
 If all four platform jobs pass and only publication fails, open **Actions → Build and publish tagged release → Run workflow** on `main`, enter the same tag, and set `reuse_run_id` to the original run ID. Recovery checks the source commit, successful platform verification, and complete unexpired artifacts before resuming the original draft. It uses publication tools from the selected workflow revision while keeping the tag pinned to the installer source; installers are not rebuilt.
 
+New builds retain a `release-source-<commit>` artifact named with the checked-out installer source, so manually building an older tag from `main` can also be recovered. Older tag-push runs remain recoverable through their matching tag and commit. Historical manual runs without a source record must be rebuilt once; their triggering branch commit cannot prove the installer source. If a source record is present, mismatched, conflicting, empty, or expired records are rejected.
+
 In-app updates still use the root `update.json`. Update it through the existing release-manifest process after the Release is public and every installer has been uploaded successfully; this workflow does not advance it early.
 
 ## Project Structure

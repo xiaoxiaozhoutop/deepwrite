@@ -1,6 +1,5 @@
 import { formatError } from "../i18n/errors";
 import { createScopedTranslator } from "../i18n";
-import { createLongWorkspaceNavigationSnapshot } from "@deepwrite/contracts/renderer";
 import {
   type LongArcId,
   type LongBookSummary,
@@ -262,25 +261,8 @@ export function useLongWorkspaceSessionCoordinator<TimerHandle>(
     try {
       await Promise.all([
         featureDependencies,
-        store.ensureWorkspace(bookId, async () => {
-          // Fetch one index plus current metadata; derive navigation locally
-          // instead of transferring the directory again in LongBookSummary.
-          const opened = await api.getWorkspaceIndex({ bookId });
-          return {
-            bookId,
-            workspaceIndex: opened.workspaceIndex,
-            ...(opened.metadata
-              ? {
-                  summary: {
-                    ...opened.metadata,
-                    navigation: createLongWorkspaceNavigationSnapshot(
-                      opened.workspaceIndex
-                    )
-                  }
-                }
-              : {})
-          };
-        })
+        // The store derives navigation only after rejecting stale responses.
+        store.ensureWorkspace(bookId, () => api.getWorkspaceIndex({ bookId }))
       ]);
     } catch (error: unknown) {
       if (disposed) return;

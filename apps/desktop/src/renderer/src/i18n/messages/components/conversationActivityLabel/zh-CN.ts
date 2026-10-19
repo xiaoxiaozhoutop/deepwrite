@@ -9,6 +9,7 @@ export default {
   askUser: "询问用户",
   commitContinuity: "提交连续性",
   webSearch: "联网搜索",
+  webFetch: "读取网页",
   switchStage: "切换阶段",
   assigningTask: "安排任务中",
   searchContent: "搜索内容",

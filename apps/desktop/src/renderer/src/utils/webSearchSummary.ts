@@ -17,6 +17,12 @@ export interface WebSearchSummary {
   empty: boolean;
 }
 
+/** The page a finished `web_fetch` read, as its text leads with it. */
+export interface WebFetchPage {
+  title: string;
+  url: string;
+}
+
 const DATE = /^\d{4}-\d{2}-\d{2}$/u;
 
 function httpUrl(value: string): string | undefined {
@@ -63,4 +69,15 @@ export function parseWebSearchSummary(text: string): WebSearchSummary {
     sources,
     empty: /没有找到相关结果/u.test(text)
   };
+}
+
+/**
+ * Reads the first lines `web_fetch` returns to the model: `网页正文：title`
+ * then `来源：url`. The page text after them is never needed for the card.
+ */
+export function parseWebFetchSummary(text: string): WebFetchPage | undefined {
+  const lines = text.split("\n");
+  const title = /^网页正文：(.*)$/u.exec(lines[0] ?? "")?.[1]?.trim();
+  const url = httpUrl(/^来源：(.+)$/u.exec(lines[1] ?? "")?.[1]?.trim() ?? "");
+  return title !== undefined && url ? { title, url } : undefined;
 }

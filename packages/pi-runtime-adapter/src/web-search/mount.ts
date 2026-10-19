@@ -1,6 +1,8 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { buildWebFetchTool } from "./fetch-tool";
 import type { WebSearchSession } from "./session";
-import { WEB_SEARCH_TOOL_NAME, buildWebSearchTool } from "./tool";
+import { WEB_FETCH_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from "./tool-names";
+import { buildWebSearchTool } from "./tool";
 
 /**
  * Whether the run's main agent has search: the user switched it on and Main
@@ -23,14 +25,24 @@ export function mainWebSearchSession(
 }
 
 /**
- * The one place a tool list gains web search. Without a session (search is off
- * or unconfigured) or when it is already there, the list is returned as is.
+ * The one place a tool list gains web access: `web_search`, and `web_fetch`
+ * when the provider can read pages. Without a session (search is off or
+ * unconfigured) the list is returned as is; a tool already there is kept, not
+ * added twice. `session` must be passed explicitly: a default would turn "no
+ * search" into the full session.
  */
 export function withWebSearchTool(
   tools: AgentTool[],
   session: WebSearchSession | undefined
 ): AgentTool[] {
-  if (!session || tools.some((tool) => tool.name === WEB_SEARCH_TOOL_NAME))
-    return tools;
-  return [...tools, buildWebSearchTool(session)];
+  if (!session) return tools;
+  const has = (name: string): boolean =>
+    tools.some((tool) => tool.name === name);
+  const added = [
+    ...(has(WEB_SEARCH_TOOL_NAME) ? [] : [buildWebSearchTool(session)]),
+    ...(session.canFetch && !has(WEB_FETCH_TOOL_NAME)
+      ? [buildWebFetchTool(session)]
+      : [])
+  ];
+  return added.length ? [...tools, ...added] : tools;
 }

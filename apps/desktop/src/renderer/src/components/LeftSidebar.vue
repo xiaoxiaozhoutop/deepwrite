@@ -2,7 +2,7 @@
 import { bookIdentityRunning } from "../stores/bookIdentityActivity";
 import { longMaterialPackRunning } from "../stores/longMaterialPackActivity";
 import { createScopedTranslator } from "../i18n";
-import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
+import { computed, onBeforeUnmount, provide, ref } from "vue";
 import type {
   BookResourceDialogMode,
   CatalogResourceNodeActionPayload,
@@ -21,7 +21,7 @@ import AppIcon from "./AppIcon.vue";
 import SidebarResourceList from "./SidebarResourceList.vue";
 import SidebarProfileMenu from "./SidebarProfileMenu.vue";
 import { createTransientScrollbarController } from "../utils/transientScrollbar";
-import { scrollSelectedIntoView } from "../utils/scrollSelectedIntoView";
+import { useSidebarSelectionReveal } from "../composables/useSidebarSelectionReveal";
 import { SIDEBAR_SELECTION_ACTIVE } from "../composables/sidebarSelectionContext";
 
 const identityT = createScopedTranslator("extras.bookIdentity");
@@ -96,20 +96,12 @@ const selectionActive = computed(
   () => props.activePrimaryFeature === undefined
 );
 provide(SIDEBAR_SELECTION_ACTIVE, selectionActive);
-watch(
-  [() => props.selectedId, selectionActive],
-  async ([selectedId, active], [, wasActive]) => {
-    if (!selectedId || !active) return;
-    await nextTick();
-    if (props.selectedId !== selectedId || !selectionActive.value) return;
-    scrollSelectedIntoView(
-      sidebarScroll.value,
-      sidebarScroll.value?.querySelector<HTMLElement>(".tree-row.is-selected"),
-      { block: wasActive ? "nearest" : "center" }
-    );
-  },
-  { flush: "post" }
-);
+useSidebarSelectionReveal({
+  selectedId: () => props.selectedId,
+  sections: () => props.sections,
+  selectionActive,
+  scroller: sidebarScroll
+});
 function handleSidebarScroll(event: Event): void {
   const element = event.currentTarget;
   if (element instanceof HTMLElement) sidebarScrollbar.reveal(element);

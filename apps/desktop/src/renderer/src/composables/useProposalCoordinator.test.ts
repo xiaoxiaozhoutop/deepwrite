@@ -3,7 +3,6 @@ import appSource from "../WorkspaceShell.vue?raw";
 import catalogProjectionSource from "./useCatalogWorkspaceProjectionCoordinator.ts?raw";
 import lazySource from "./useLazyProposalCoordinator.ts?raw";
 import longImpactApprovalSource from "./proposal-coordinator/long-impact-approval.ts?raw";
-import plotStructureLaneSource from "./proposal-coordinator/plot-structure-lane.ts?raw";
 import worldbuildingLaneSource from "./proposal-coordinator/long-worldbuilding-lane.ts?raw";
 import queueSource from "./proposal-coordinator/queue.ts?raw";
 import source from "./useProposalCoordinator.ts?raw";
@@ -179,12 +178,6 @@ describe("useProposalCoordinator extraction boundary", () => {
     expect(source).toContain("createPlotStructureProposalLane({");
     expect(source).toContain("plotStructureProposalLane.stage(");
     expect(source).toContain("plotStructureProposalLane.accept(");
-    expect(plotStructureLaneSource).toContain(
-      "await api.catalog.mutatePlotStructure({"
-    );
-    expect(plotStructureLaneSource).toContain(
-      "await api.catalog.saveDocument({"
-    );
     expect(source).toContain("async function acceptLongPlotDesignProposal(");
     expect(source).toContain("async function acceptLongCharacterFileProposal(");
     expect(worldbuildingLaneSource).toContain(

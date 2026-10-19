@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { pageJsonValue } from "./query-json-page";
 
 it.each([1, 7, 37, 12000])(
@@ -42,5 +42,29 @@ it("returns an empty terminal page for a cursor at or beyond the end", () => {
       nextCursor: null,
       totalCharacters
     });
+  }
+});
+
+it("bounds temporary serialization of a long scalar while preserving escaped and surrogate boundaries", () => {
+  const prose =
+    "x".repeat(8191) + "😀" + '中"\n\\😀\ud800-\udfff'.repeat(20000);
+  const value = { [prose]: [prose] };
+  const expected = JSON.stringify(value);
+  const stringify = JSON.stringify;
+  let largestString = 0;
+  const spy = vi.spyOn(JSON, "stringify").mockImplementation((input) => {
+    if (typeof input === "string")
+      largestString = Math.max(largestString, input.length);
+    return stringify(input);
+  });
+  try {
+    for (const cursor of [0, 8191, 16383, expected.length - 12000]) {
+      const page = pageJsonValue(value, cursor, 12000);
+      expect(page.content).toBe(expected.slice(cursor, cursor + 12000));
+      expect(page.totalCharacters).toBe(expected.length);
+    }
+    expect(largestString).toBeLessThanOrEqual(16384);
+  } finally {
+    spy.mockRestore();
   }
 });

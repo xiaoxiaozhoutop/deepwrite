@@ -2,12 +2,14 @@ import {
   CLOUD_BACKUP_MANIFEST_VERSION,
   CLOUD_BACKUP_QUOTA_BYTES,
   CloudBackupItemSchema,
+  type CloudBackupChange,
   type CloudBackupItem,
   type CloudBackupItemKind
 } from "@deepwrite/contracts";
 import { createZip, readZip, type ZipEntryInput } from "./zip";
 import type { LocalBackupProject } from "./catalog-reader";
-import { toManifestItems } from "./catalog-reader";
+import { hashProjectFiles, toManifestItems } from "./catalog-reader";
+import { backupItemKey } from "./diff";
 
 export interface CloudBackupSnapshotManifest {
   version: typeof CLOUD_BACKUP_MANIFEST_VERSION;
@@ -100,14 +102,14 @@ export function parseSnapshotManifest(
   };
 }
 
-export function extractProjectFiles(
-  zip: Buffer,
+function extractProjectFiles(
+  entries: ReadonlyMap<string, Buffer>,
   kind: CloudBackupItemKind,
   id: string
 ): Array<{ relativePath: string; data: Buffer }> {
   const prefix = itemArchivePrefix(kind, id);
   const files: Array<{ relativePath: string; data: Buffer }> = [];
-  for (const [name, data] of readZip(zip)) {
+  for (const [name, data] of entries) {
     if (!name.startsWith(prefix) || name.endsWith("/")) continue;
     const relativePath = name.slice(prefix.length);
     if (!relativePath || relativePath.includes("..")) {
@@ -115,7 +117,47 @@ export function extractProjectFiles(
     }
     files.push({ relativePath, data });
   }
+  // Legacy hashes include the source host's file order, which the ZIP keeps.
+  // Re-sorting by this host's locale would reject valid cross-device backups.
   return files;
+}
+
+/** Decode once and validate every selected project before the first local write. */
+export function readBackupSnapshot(
+  zip: Buffer,
+  manifest: CloudBackupSnapshotManifest | null,
+  changes: readonly CloudBackupChange[]
+): Map<string, Array<{ relativePath: string; data: Buffer }>> {
+  if (!manifest || zip.length !== manifest.sizeBytes) {
+    throw new Error("云端备份文件与预览不一致，请重新预览后再同步。");
+  }
+  const entries = readZip(zip);
+  const items = new Map(
+    manifest.items.map((item) => [backupItemKey(item), item])
+  );
+  const projects = new Map<
+    string,
+    Array<{ relativePath: string; data: Buffer }>
+  >();
+  for (const change of changes) {
+    if (change.change !== "add" && change.change !== "overwrite") continue;
+    const key = backupItemKey(change);
+    const item = items.get(key);
+    const files = extractProjectFiles(entries, change.kind, change.id);
+    const actual = hashProjectFiles(files);
+    if (
+      !item ||
+      !files.length ||
+      actual.hash !== item.hash ||
+      actual.sizeBytes !== item.sizeBytes
+    ) {
+      throw new Error(
+        `云端备份文件与预览不一致：${change.title}，请重新预览后再同步。`
+      );
+    }
+    projects.set(key, files);
+  }
+  return projects;
 }
 
 export function formatBytes(bytes: number): string {

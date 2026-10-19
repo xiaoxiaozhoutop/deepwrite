@@ -1,4 +1,7 @@
-import type { WebSearchProviderId } from "@deepwrite/contracts";
+import {
+  WEB_SEARCH_PROVIDERS,
+  type WebSearchProviderId
+} from "@deepwrite/contracts";
 import { deepSeekWebSearchClient } from "./providers/deepseek";
 import type { WebSearchProviderClient } from "./types";
 
@@ -11,4 +14,12 @@ export function webSearchClient(
   id: WebSearchProviderId
 ): WebSearchProviderClient {
   return WEB_SEARCH_CLIENTS[id];
+}
+
+/** The descriptor and the client agree that pages can be read. */
+export function webFetchAvailable(id: WebSearchProviderId): boolean {
+  return (
+    WEB_SEARCH_PROVIDERS[id].supportsFetch &&
+    WEB_SEARCH_CLIENTS[id].fetch !== undefined
+  );
 }

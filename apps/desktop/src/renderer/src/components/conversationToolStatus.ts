@@ -2,7 +2,13 @@ import { createScopedTranslator, locale } from "../i18n";
 import type { AgentToolTrace } from "../types/conversation";
 import type { IconName } from "../types/workspace";
 import { writeToolText } from "../utils/agentWriteToolPreview";
-import { parseWebSearchSummary } from "../utils/webSearchSummary";
+import {
+  compactTrace,
+  hasWebSources,
+  isWebSearchTool,
+  isWebToolName,
+  webToolDetail
+} from "./conversationWebTools";
 
 const t = createScopedTranslator("components.conversationToolStatus");
 
@@ -64,7 +70,8 @@ export function workspaceToolLabel(name: string): string {
     rename_character_item: t("renameCharacter"),
     move_character_item: t("moveCharacterEntry"),
     delete_character_file: t("deleteCharacterFile"),
-    web_search: t("webSearch")
+    web_search: t("webSearch"),
+    web_fetch: t("webFetch")
   };
   return labels[name] ?? name;
 }
@@ -154,14 +161,9 @@ export function writeActionLabel(action: WriteToolAction): string {
   return action === "write" ? t("write") : t("edit");
 }
 
-/** The one tool that reaches the web; its name must not read as a file search. */
-export function isWebSearchTool(tool: Pick<AgentToolTrace, "name">): boolean {
-  return tool.name === "web_search";
-}
-
 export function toolKind(toolName: string): ToolKind {
   const name = toolName.toLowerCase();
-  if (name === "web_search") return "web";
+  if (isWebToolName(name)) return "web";
   if (
     WRITE_TOOL_NAMES.has(name) ||
     /(write|edit|replace|patch|save|apply)/.test(name)
@@ -257,25 +259,6 @@ export function toolGroupLabel(tools: AgentToolTrace[]): string {
   return toolGroupIsRunning(tools) ? t("runningLabel") : t("completed");
 }
 
-function compactTrace(value: string): string {
-  const compact = value.replace(/\s+/g, " ").trim();
-  return compact.length > 180 ? `${compact.slice(0, 177)}…` : compact;
-}
-
-/** The query while it runs, then the query with what it found. */
-function webSearchDetail(tool: AgentToolTrace): string | undefined {
-  const args = tool.args as Record<string, unknown> | undefined;
-  const asked = typeof args?.query === "string" ? args.query : "";
-  if (tool.status !== "completed" || !tool.resultSummary)
-    return asked ? compactTrace(asked) : undefined;
-  const found = parseWebSearchSummary(tool.resultSummary);
-  const query = compactTrace(found.query || asked);
-  if (found.empty) return t("webSearchNoResults", { query });
-  return found.total === undefined
-    ? query
-    : t("webSearchResultCount", { query, count: found.total });
-}
-
 export function toolDetail(tool: AgentToolTrace): string | undefined {
   if (tool.status === "preparing") {
     const length = writeToolText(tool).length;
@@ -292,8 +275,8 @@ export function toolDetail(tool: AgentToolTrace): string | undefined {
       arg0: writeActionLabel(writeToolAction(tool))
     });
   }
-  if (isWebSearchTool(tool) && tool.status !== "error") {
-    return webSearchDetail(tool);
+  if (hasWebSources(tool) && tool.status !== "error") {
+    return webToolDetail(tool);
   }
   if (tool.resultSummary?.trim()) {
     return compactTrace(tool.resultSummary);

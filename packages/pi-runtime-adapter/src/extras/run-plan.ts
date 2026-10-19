@@ -14,10 +14,9 @@ import { buildSpawnSubagentTool } from "../subagent-runtime";
 import type { AgentRunBuildContext } from "../kernel/run-plan";
 import { rawUserMessageContent } from "../prompts-user-message";
 import type { AgentRuntimeEvent } from "../runtime-types";
-import { webSearchCompactor } from "../web-search/compactor";
+import { WEB_TOOL_COMPACTORS } from "../web-search/compactor";
 import { webSearchPromptFor } from "../web-search/prompt";
 import { createWebSearchSession } from "../web-search/session";
-import { WEB_SEARCH_TOOL_NAME } from "../web-search/tool";
 import { chatNormalAgent } from "./agents/chat-normal";
 import { chatProjectAgent } from "./agents/chat-project";
 import { chatRoleplayAgent } from "./agents/chat-roleplay";
@@ -264,7 +263,7 @@ export function planExtrasRun(input: ExtrasAgentRunInput): AgentRunPlan {
     spec.contextCompactionSettings && {
       settings: spec.contextCompactionSettings,
       task: spec.task.agentId === "chat-roleplay" ? "roleplay" : "chat",
-      toolCompactors: { [WEB_SEARCH_TOOL_NAME]: webSearchCompactor },
+      toolCompactors: WEB_TOOL_COMPACTORS,
       ...(turn.checkpoint ? { checkpoint: turn.checkpoint } : {}),
       ...(turn.compaction ? { manual: turn.compaction } : {})
     };

@@ -1,15 +1,15 @@
 import { formatError } from "../../i18n/errors";
 import { createScopedTranslator } from "../../i18n";
-import type {
-  Book,
-  DeepWriteApi,
-  SystemEventEnvelope
-} from "@deepwrite/contracts";
+import type { DeepWriteApi, SystemEventEnvelope } from "@deepwrite/contracts";
 import { createShortWorkspaceContentRevision } from "@deepwrite/contracts";
 import type { AgentEditProposal } from "../../types/conversation";
 import { agentEditProposalId } from "../../utils/agentEditReview";
 import { buildAgentTextDiff } from "../../utils/agentTextDiff";
 import type { AgentConversationController } from "../useAgentConversation";
+import {
+  persistPlotStructure,
+  type PlotStructurePersistencePort
+} from "./plot-structure-persistence";
 
 const t = createScopedTranslator("workspace");
 
@@ -25,10 +25,8 @@ interface PlotStructureLaneNotifications {
   warning(message: string): void;
 }
 
-interface PlotStructureLaneInput {
+interface PlotStructureLaneInput extends PlotStructurePersistencePort {
   api(): DeepWriteApi | undefined;
-  catalogBook(bookId: string): Book | undefined;
-  loadCatalogSnapshot(): Promise<unknown>;
   isCatalogConflict(error: unknown): boolean;
   isWorkspaceAccepting(workspaceId: string): boolean;
   setWorkspaceAccepting(workspaceId: string, accepting: boolean): void;
@@ -41,15 +39,6 @@ interface PlotStructureLaneInput {
     automatic: boolean,
     scheduleImmediately: boolean
   ): void;
-}
-
-export function plotStructureCreationStageId(
-  proposalId: string,
-  provisionalStageId: string
-): string {
-  const proposalRevision = createShortWorkspaceContentRevision(proposalId);
-  const safeProposalId = proposalId.replace(/[^A-Za-z0-9._:-]/gu, "-");
-  return `plot-stage-agent:${proposalRevision}:${safeProposalId.slice(0, 20)}:${safeProposalId.slice(-20)}:${provisionalStageId.slice(-24)}`;
 }
 
 export function createPlotStructureProposalLane(input: PlotStructureLaneInput) {
@@ -217,97 +206,21 @@ export function createPlotStructureProposalLane(input: PlotStructureLaneInput) {
     input.setWorkspaceAccepting(proposal.workspaceId, true);
     try {
       const mutation = target.mutation;
-      const createdStageId =
-        mutation.type === "create"
-          ? plotStructureCreationStageId(
-              proposal.id,
-              mutation.provisionalStageId
-            )
-          : undefined;
-      const updated = await api.catalog.mutatePlotStructure({
-        bookId: proposal.workspaceId,
-        // The catalog command still requires this legacy field, but force makes
-        // the mutation operate on the latest serialized project state.
-        baseProjectRevision: book.projectRevision ?? 0,
-        force: true,
-        mutation:
-          mutation.type === "create"
-            ? {
-                type: "create",
-                stageId: createdStageId!,
-                title: mutation.title,
-                description: mutation.description
-              }
-            : {
-                type: "update",
-                stageId: mutation.stageId,
-                title: mutation.title,
-                description: mutation.description
-              }
+      const projectRevision = await persistPlotStructure({
+        ...input,
+        api,
+        book,
+        proposal
       });
-      if (mutation.type === "create") {
-        const createdStage = updated.plotStages.find(
-          ({ id }) => id === createdStageId
-        );
-        const createdDocument = createdStage
-          ? updated.documents.find(
-              (document) => document.id === createdStage.id
-            )
-          : undefined;
-        if (!createdStage || !createdDocument) {
-          throw new Error(
-            t("plotStructureLane.thePlotStructureWasCreatedButItsContentFile")
-          );
-        }
-        const intendedContent = mutation.content.trim() ? mutation.content : "";
-        if (
-          createdDocument.content.trim() &&
-          createdDocument.content !== intendedContent
-        ) {
-          throw new Error(
-            t(
-              "plotStructureLane.theNewPlotStructureAlreadyHasDifferentContentThe"
-            )
-          );
-        }
-        if (createdDocument.content !== intendedContent) {
-          await api.catalog.saveDocument({
-            bookId: proposal.workspaceId,
-            documentId: createdDocument.id,
-            content: intendedContent,
-            force: true
-          });
-        }
-      }
-      await input.loadCatalogSnapshot();
-      if (mutation.type === "create") {
-        const refreshed = input.catalogBook(proposal.workspaceId);
-        const refreshedStage = refreshed?.plotStages.find(
-          ({ id }) => id === createdStageId
-        );
-        const refreshedDocument = refreshed?.documents.find(
-          ({ id }) => id === createdStageId
-        );
-        const intendedContent = mutation.content.trim() ? mutation.content : "";
-        if (
-          !refreshedStage ||
-          !refreshedDocument ||
-          refreshedDocument.content !== intendedContent
-        ) {
-          throw new Error(
-            t("plotStructureLane.thePlotStructureWasCreatedButItsContentFile2")
-          );
-        }
-      }
       conversation.updateEditProposal(request.runId, request.proposalId, {
         status: "accepted",
         proposedText: undefined,
-        ...(updated.projectRevision === undefined
+        ...(projectRevision === undefined
           ? {}
           : {
               discardSnapshot: {
                 ...proposal.discardSnapshot,
-                appliedProjectRevision: updated.projectRevision
+                appliedProjectRevision: projectRevision
               }
             }),
         statusMessage:

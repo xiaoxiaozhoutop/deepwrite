@@ -1,7 +1,6 @@
 import { formatError } from "../i18n/errors";
 import { createScopedTranslator } from "../i18n";
 import {
-  createLongWorkspaceNavigationSnapshot,
   type LongBookSummary,
   type LongWorkspaceIndexSnapshot,
   type LongWriteDocumentResult
@@ -18,6 +17,7 @@ import {
   type LongWorkspaceSelection
 } from "../types/longWorkspace";
 import { createLongWorkspaceRefreshClock } from "../utils/longWorkspaceRefresh";
+import { longWorkspaceSummaryFromIndex } from "../utils/longWorkspaceSummary";
 
 const t = createScopedTranslator("workspace.longWorkspaceRefreshCoordinator");
 
@@ -99,11 +99,7 @@ export function useLongWorkspaceRefreshCoordinator(
           t("theActiveNovelSummaryChangedRefreshResultsCannotBe")
         );
       }
-      const nextSummary: LongBookSummary = {
-        ...currentSummary,
-        updatedAt: result.workspaceIndex.updatedAt,
-        navigation: createLongWorkspaceNavigationSnapshot(result.workspaceIndex)
-      };
+      const nextSummary = longWorkspaceSummaryFromIndex(result, currentSummary);
       const currentSelection = state.selection.value;
       const nextSelection = currentSelection
         ? (reconcileLongWorkspaceSelection(

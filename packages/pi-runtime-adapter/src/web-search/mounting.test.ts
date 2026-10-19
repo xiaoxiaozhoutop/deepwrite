@@ -30,7 +30,7 @@ import {
   shortWorkspace
 } from "../short-agent-tools.test-support";
 import { inspectTranscript } from "../transcript.test-support";
-import { WEB_SEARCH_PROMPT } from "./prompt";
+import { WEB_SEARCH_FETCH_PROMPT } from "./prompt";
 import { runtimeConfig } from "./test-support";
 
 const contextOf = (searching: boolean) =>
@@ -113,6 +113,12 @@ function options(
 const names = (tools: readonly Pick<AgentTool, "name">[]) =>
   tools.map(({ name }) => name);
 const SEARCH = "web_search";
+const FETCH = "web_fetch";
+const WEB_PAIR = [FETCH, SEARCH];
+const webOf = (tools: readonly Pick<AgentTool, "name">[]) =>
+  names(tools)
+    .filter((name) => name === SEARCH || name === FETCH)
+    .sort();
 
 function mainInputs(searching: boolean): Record<string, AgentRunInput> {
   const base = { sessionId: "session", runId: "run", prompt: "你好" };
@@ -187,9 +193,8 @@ describe("web_search in the main agent's tools", () => {
           options(harness())
         );
         expect(names(tools).includes(SEARCH)).toBe(searching);
-        expect(names(tools).filter((name) => name === SEARCH).length).toBe(
-          searching ? 1 : 0
-        );
+        // Whoever has search has page reading too, once each.
+        expect(webOf(tools)).toEqual(searching ? WEB_PAIR : []);
       }
     );
   }
@@ -201,7 +206,7 @@ describe("the main agent's switch", () => {
     (kind) => {
       const { webSearchEnabled: _off, ...input } = mainInputs(true)[kind]!;
       const tools = buildRunTools(input, options(harness()));
-      expect(names(tools)).not.toContain(SEARCH);
+      expect(webOf(tools)).toEqual([]);
     }
   );
 
@@ -209,9 +214,13 @@ describe("the main agent's switch", () => {
     const { webSearchEnabled: _off, ...input } = mainInputs(true).短篇!;
     const prompt = buildEffectiveSystemPrompt("基础提示。", input);
     expect(prompt).not.toContain("【联网搜索】");
+    expect(prompt).not.toContain(FETCH);
+    const on = buildEffectiveSystemPrompt("基础提示。", mainInputs(true).短篇!);
+    expect(on).toContain(WEB_SEARCH_FETCH_PROMPT);
+    expect(on).toContain("联网查证公开资料使用 web_search、web_fetch");
     expect(
-      buildEffectiveSystemPrompt("基础提示。", mainInputs(true).短篇!)
-    ).toContain("【联网搜索】");
+      buildEffectiveSystemPrompt("基础提示。", mainInputs(false).短篇!)
+    ).not.toContain(FETCH);
   });
 });
 
@@ -257,8 +266,13 @@ describe("web_search follows each member's web search mode", () => {
       const context = await childTools(
         run({ config: true, main, ...(mode ? { mode } : {}) })
       );
-      expect(names(context.tools ?? []).includes(SEARCH)).toBe(expected);
-      expect(context.systemPrompt?.includes(WEB_SEARCH_PROMPT)).toBe(expected);
+      expect(webOf(context.tools ?? [])).toEqual(expected ? WEB_PAIR : []);
+      expect(context.systemPrompt?.includes(WEB_SEARCH_FETCH_PROMPT)).toBe(
+        expected
+      );
+      // The section is what depends on holding the tools; the boundary line
+      // handed to every child follows the main agent's switch instead.
+      expect(context.systemPrompt?.includes("【联网搜索】")).toBe(expected);
     }
   );
 
@@ -267,7 +281,7 @@ describe("web_search follows each member's web search mode", () => {
       run({ config: true, main: false, mode: "on" }),
       options(harness())
     );
-    expect(names(tools)).not.toContain(SEARCH);
+    expect(webOf(tools)).toEqual([]);
     expect(names(tools)).toContain("spawn_subagent");
   });
 
@@ -275,7 +289,7 @@ describe("web_search follows each member's web search mode", () => {
     const context = await childTools(
       run({ config: false, main: true, mode: "on" })
     );
-    expect(names(context.tools ?? [])).not.toContain(SEARCH);
+    expect(webOf(context.tools ?? [])).toEqual([]);
   });
 
   it("keeps a bare member toolless whatever its mode says", async () => {
@@ -326,23 +340,31 @@ describe("web_search in subagents", () => {
     const withSearch = await runChild(shortRun(true), mode);
     const childTools = (withSearch.tools ?? []).map(({ name }) => name);
     expect(childTools.includes(SEARCH)).toBe(gets);
-    expect(withSearch.systemPrompt?.includes(WEB_SEARCH_PROMPT)).toBe(gets);
+    expect(webOf(withSearch.tools ?? [])).toEqual(gets ? WEB_PAIR : []);
+    expect(withSearch.systemPrompt?.includes(WEB_SEARCH_FETCH_PROMPT)).toBe(
+      gets
+    );
     if (mode === "pure-read")
       expect(childTools.sort()).toEqual([
         "query_linked_material_entries",
         "read",
+        FETCH,
         SEARCH
       ]);
     const without = await runChild(shortRun(false), mode);
-    expect(names(without.tools ?? [])).not.toContain(SEARCH);
+    expect(webOf(without.tools ?? [])).toEqual([]);
     expect(without.systemPrompt).not.toContain("【联网搜索】");
+    expect(without.systemPrompt).not.toContain(FETCH);
   });
 
   it("tells a pure-read child it may look things up when it can", async () => {
     const context = await runChild(shortRun(true), "pure-read");
-    expect(context.systemPrompt).toContain("工具清单列有 web_search 时");
+    expect(context.systemPrompt).toContain(
+      "工具清单列有 web_search 时，也可用 web_search、web_fetch 查证公开资料"
+    );
     const plain = await runChild(shortRun(false), "pure-read");
     expect(plain.systemPrompt).not.toContain("web_search");
+    expect(plain.systemPrompt).not.toContain(FETCH);
   });
 
   it("shares one search budget between the main agent and its children", async () => {
@@ -362,6 +384,32 @@ describe("web_search in subagents", () => {
     await expect(
       search.execute("three", { query: "主智能体再查" } as never)
     ).rejects.toThrow("本轮联网搜索已达上限（2 次）");
+    // Reading a page draws on the same spent budget.
+    const fetchPage = tools.find((tool) => tool.name === FETCH)!;
+    await expect(
+      fetchPage.execute("four", { url: "https://example.test/a" } as never)
+    ).rejects.toThrow("本轮联网搜索已达上限（2 次）");
+  });
+
+  it("lets the main agent and a child read one page for a single call", async () => {
+    const address = "https://example.test/shared";
+    const runtime = harness([
+      fauxAssistantMessage(fauxToolCall(FETCH, { url: address }), {
+        stopReason: "toolUse"
+      }),
+      fauxAssistantMessage("子任务完成")
+    ]);
+    const tools = buildRunTools(shortRun(true), options(runtime, "local-faux"));
+    const fetchPage = tools.find((tool) => tool.name === FETCH)!;
+    const spawn = tools.find((tool) => tool.name === "spawn_subagent")!;
+    const first = await fetchPage.execute("one", { url: address } as never);
+    await spawn.execute("call", {
+      tasks: [{ subagent_id: member("standard").id, task: "读一下" }]
+    } as never);
+    const again = await fetchPage.execute("two", { url: address } as never);
+    expect(first.details).toMatchObject({ cached: false, callIndex: 1 });
+    // The child's read came from the cache, so the count did not move.
+    expect(again.details).toMatchObject({ cached: true, callIndex: 1 });
   });
 });
 
@@ -401,8 +449,60 @@ describe("web_search in library management children", () => {
       task: "按用户要求记录情节"
     } as never);
     const child = runtime.contexts[0]!;
-    expect(names(child.tools ?? [])).toContain(SEARCH);
+    expect(webOf(child.tools ?? [])).toEqual(WEB_PAIR);
     const occurrences = child.systemPrompt!.split("【联网搜索】").length - 1;
     expect(occurrences).toBe(1);
   });
+});
+
+describe("web access in the members of every creative workspace", () => {
+  async function childTools(
+    kind: "短篇" | "剧本" | "长篇",
+    main: boolean,
+    mode: SubagentWebSearchMode,
+    agentMode: SubagentAgentMode
+  ) {
+    const { webSearchEnabled: _flag, ...base } = mainInputs(true)[kind]!;
+    const input: AgentRunInput = {
+      ...base,
+      ...(main ? { webSearchEnabled: true } : {}),
+      subagentDefinitions: [member(agentMode, mode)]
+    };
+    const runtime = harness();
+    const spawn = buildRunTools(input, options(runtime)).find(
+      (tool) => tool.name === "spawn_subagent"
+    )!;
+    await spawn.execute("call", {
+      tasks: [{ subagent_id: member(agentMode).id, task: "处理这一段" }]
+    } as never);
+    return runtime.contexts[0]!;
+  }
+
+  const cases = (["短篇", "剧本", "长篇"] as const).flatMap((kind) =>
+    (
+      [
+        ["standard", "inherit", true, true],
+        ["standard", "inherit", false, false],
+        ["standard", "on", false, true],
+        ["standard", "off", true, false],
+        ["pure-read", "on", false, true],
+        ["pure-read", "off", true, false]
+      ] as const
+    ).map(([agentMode, mode, main, expected]) => ({
+      kind,
+      agentMode,
+      mode,
+      main,
+      expected
+    }))
+  );
+
+  it.each(cases)(
+    "$kind $agentMode 成员：联网配置 $mode、主开关 $main 时有联网工具：$expected",
+    async ({ kind, agentMode, mode, main, expected }) => {
+      const context = await childTools(kind, main, mode, agentMode);
+      // Search and page reading go together, once each.
+      expect(webOf(context.tools ?? [])).toEqual(expected ? WEB_PAIR : []);
+    }
+  );
 });

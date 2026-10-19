@@ -5,7 +5,7 @@ import type { LongWorkspaceIndexSnapshot } from "@deepwrite/contracts";
 import type { ProcessingDisplayItem } from "./conversationToolPresentation";
 import {
   formatToolPayload,
-  isWebSearchTool,
+  hasWebSources,
   isWriteTool,
   toolDetail,
   toolGroupIsRunning,
@@ -162,7 +162,7 @@ function detailId(id: string): string {
       <div v-if="item.tool.resultSummary">
         <span>{{ t("result") }}</span>
         <WebSearchSources
-          v-if="isWebSearchTool(item.tool) && item.tool.status === 'completed'"
+          v-if="hasWebSources(item.tool) && item.tool.status === 'completed'"
           :summary="item.tool.resultSummary"
         />
         <p v-else>{{ item.tool.resultSummary }}</p>
@@ -237,7 +237,7 @@ function detailId(id: string): string {
           <div v-if="tool.resultSummary">
             <span>{{ t("result") }}</span>
             <WebSearchSources
-              v-if="isWebSearchTool(tool) && tool.status === 'completed'"
+              v-if="hasWebSources(tool) && tool.status === 'completed'"
               :summary="tool.resultSummary"
             />
             <p v-else>{{ tool.resultSummary }}</p>

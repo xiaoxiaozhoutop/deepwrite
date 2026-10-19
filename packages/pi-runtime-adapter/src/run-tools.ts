@@ -24,18 +24,14 @@ import { buildSubagentMaterialContext } from "./prompts-material";
 import { buildSpawnSubagentTool } from "./subagent-runtime";
 import { workspaceContextPolicy } from "./workspace-context-policy";
 import { writeApprovalBoundary } from "./write-approval";
+import { writingSubagentContext } from "./writing-subagent-context";
 import { buildProviderRuntime, toPiThinkingLevel } from "./provider-runtime";
 import { mainWebSearchSession, withWebSearchTool } from "./web-search/mount";
+import { webToolNamesFor } from "./web-search/prompt";
 import {
   createWebSearchSession,
   type WebSearchSession
 } from "./web-search/session";
-import {
-  scriptReadOnlyRuntimeSystemRequirements,
-  scriptRuntimeSystemRequirements,
-  shortReadOnlyRuntimeSystemRequirements,
-  shortRuntimeSystemRequirements
-} from "./prompts";
 export interface BuildRunToolsOptions extends Pick<
   BuildSpawnSubagentToolInput,
   | "model"
@@ -258,31 +254,21 @@ export function buildRunTools(
           ? (listener) => buildLongTools(false, listener, webSearch)
           : (listener) => buildWritingTools(listener, webSearch),
       mainWebSearch: input.webSearchEnabled === true,
-      ...(scriptWorkspace
-        ? {
-            systemPromptRequirements: scriptRuntimeSystemRequirements(input),
-            pureReadSystemPromptRequirements:
-              scriptReadOnlyRuntimeSystemRequirements(input)
-          }
-        : shortWorkspace
+      ...(scriptWorkspace || shortWorkspace
+        ? writingSubagentContext(input, writingToolSharedState)
+        : longWorkspace
           ? {
-              systemPromptRequirements: shortRuntimeSystemRequirements(input),
-              pureReadSystemPromptRequirements:
-                shortReadOnlyRuntimeSystemRequirements(input)
+              systemPromptRequirements: [
+                "这是长篇主智能体委派的单层子任务。只能使用继承的长篇查询/提案工具和当前 bookId。交回结果时列出已提交的修改。",
+                writeApprovalBoundary(input.writeApprovalMode)
+              ].join("\n"),
+              pureReadSystemPromptRequirements: `这是长篇主智能体委派的单层只读子任务。只能使用 read、list 读取当前 bookId 的作品，以及 query_linked_material_entries 读取素材${
+                input.webSearch
+                  ? `；工具清单列有 web_search 时，也可用 ${webToolNamesFor(input.webSearch.providerId)} 查证公开资料`
+                  : ""
+              }；没有任何写入工具，不能修改作品，也不得声称已修改或已提交连续性账本。`
             }
-          : longWorkspace
-            ? {
-                systemPromptRequirements: [
-                  "这是长篇主智能体委派的单层子任务。只能使用继承的长篇查询/提案工具和当前 bookId。交回结果时列出已提交的修改。",
-                  writeApprovalBoundary(input.writeApprovalMode)
-                ].join("\n"),
-                pureReadSystemPromptRequirements: `这是长篇主智能体委派的单层只读子任务。只能使用 read、list 读取当前 bookId 的作品，以及 query_linked_material_entries 读取素材${
-                  webSearch
-                    ? "；工具清单列有 web_search 时，也可用它查证公开资料"
-                    : ""
-                }；没有任何写入工具，不能修改作品，也不得声称已修改或已提交连续性账本。`
-              }
-            : {}),
+          : {}),
       toolExecutionHooks: options.toolExecutionHooks,
       ...(options.retryPolicy ? { retryPolicy: options.retryPolicy } : {}),
       ...(options.subagentTimeoutMs === undefined

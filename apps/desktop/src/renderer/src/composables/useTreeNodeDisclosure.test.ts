@@ -4,6 +4,47 @@ import type { ResourceTreeNode } from "../types/workspace";
 import { useTreeNodeDisclosure } from "./useTreeNodeDisclosure";
 
 describe("useTreeNodeDisclosure", () => {
+  it.each(["character-b", "characters"])(
+    "keeps a manually collapsed directory closed after deletion selects %s",
+    async (fallback) => {
+      const node = shallowRef<ResourceTreeNode>({
+        id: "characters",
+        label: "人物",
+        selectableBranch: true,
+        children: [
+          { id: "character-a", label: "人物甲" },
+          { id: "character-b", label: "人物乙" }
+        ]
+      });
+      const selectedId = ref("character-a");
+      const scope = effectScope();
+      try {
+        const { open } = scope.run(() =>
+          useTreeNodeDisclosure(
+            () => node.value,
+            () => selectedId.value
+          )
+        )!;
+        expect(open.value).toBe(true);
+        open.value = false;
+        node.value = { ...node.value, children: [node.value.children![1]!] };
+        // The index store publishes the new tree before selection reconciliation.
+        await nextTick();
+        selectedId.value = fallback;
+        await nextTick();
+        expect(open.value).toBe(false);
+
+        selectedId.value = "other-resource";
+        await nextTick();
+        selectedId.value = fallback;
+        await nextTick();
+        expect(open.value).toBe(true);
+      } finally {
+        scope.stop();
+      }
+    }
+  );
+
   it("keeps a manually collapsed selected book closed when its tree refreshes", async () => {
     const node = shallowRef<ResourceTreeNode>({
       id: "long-book",

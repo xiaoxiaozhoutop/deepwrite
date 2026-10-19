@@ -29,8 +29,10 @@ export interface WebSearchProviderDescriptor {
   maxResultsCap: number;
   defaultMaxResults: number;
   queryMaxChars: number;
-  /** Reserved for the page-fetch tool; no provider offers it yet. */
+  /** Whether the provider can read one page's text, which mounts `web_fetch`. */
   supportsFetch: boolean;
+  /** Longest address `web_fetch` sends; only meaningful with `supportsFetch`. */
+  fetchUrlMaxChars: number;
   keyImport?: WebSearchKeyImportRule;
 }
 
@@ -41,7 +43,8 @@ export const WEB_SEARCH_PROVIDERS = {
     maxResultsCap: 20,
     defaultMaxResults: 8,
     queryMaxChars: 128,
-    supportsFetch: false,
+    supportsFetch: true,
+    fetchUrlMaxChars: 8192,
     keyImport: {
       modelProviders: ["deepseek"],
       baseUrlHosts: ["api.deepseek.com"]

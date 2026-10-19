@@ -6,7 +6,7 @@ import {
   resolveConversationAgent,
   runFauxExtras
 } from "../extras.test-support";
-import { WEB_SEARCH_PROMPT } from "../../web-search/prompt";
+import { WEB_SEARCH_FETCH_PROMPT } from "../../web-search/prompt";
 import { runtimeConfig } from "../../web-search/test-support";
 import { cachedAgents, chatNormalTask } from "./chat.test-support";
 
@@ -28,7 +28,7 @@ describe("normal chat agent", () => {
     expect(systemPrompt.indexOf("DeepWrite 软件基础情况")).toBeGreaterThan(
       boundary
     );
-    expect(systemPrompt).toContain("网络能力仅限本轮实际列出的联网搜索工具");
+    expect(systemPrompt).toContain("网络能力仅限本轮实际列出的联网工具");
     expect(systemPrompt).not.toContain("DeepSeek 服务端");
     expect(systemPrompt).not.toContain("【联网搜索】");
   });
@@ -36,13 +36,17 @@ describe("normal chat agent", () => {
   it("mounts web search and its rules only when Main attached search settings", () => {
     const without = buildConversationRun(chatNormalTask());
     expect(without.tools.map(({ name }) => name)).not.toContain("web_search");
+    expect(without.tools.map(({ name }) => name)).not.toContain("web_fetch");
     expect(without.systemPrompt).not.toContain("【联网搜索】");
+    expect(without.systemPrompt).not.toContain("web_fetch");
 
     const run = buildConversationRun(chatNormalTask(), {
       webSearch: runtimeConfig()
     });
-    expect(run.tools.map(({ name }) => name)).toContain("web_search");
-    expect(run.systemPrompt).toContain(WEB_SEARCH_PROMPT);
+    expect(run.tools.map(({ name }) => name)).toEqual(
+      expect.arrayContaining(["web_search", "web_fetch"])
+    );
+    expect(run.systemPrompt).toContain(WEB_SEARCH_FETCH_PROMPT);
     expect(run.systemPrompt.indexOf("【普通聊天运行边界】")).toBeLessThan(
       run.systemPrompt.indexOf("【联网搜索】")
     );

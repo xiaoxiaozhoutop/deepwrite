@@ -4,7 +4,9 @@ import type {
   CloudBackupItem
 } from "@deepwrite/contracts";
 
-function itemKey(item: Pick<CloudBackupItem, "kind" | "id">): string {
+export function backupItemKey(
+  item: Pick<CloudBackupItem, "kind" | "id">
+): string {
   return `${item.kind}:${item.id}`;
 }
 
@@ -42,8 +44,12 @@ export function diffBackupItems(
   localItems: readonly CloudBackupItem[],
   remoteItems: readonly CloudBackupItem[]
 ): CloudBackupChange[] {
-  const localByKey = new Map(localItems.map((item) => [itemKey(item), item]));
-  const remoteByKey = new Map(remoteItems.map((item) => [itemKey(item), item]));
+  const localByKey = new Map(
+    localItems.map((item) => [backupItemKey(item), item])
+  );
+  const remoteByKey = new Map(
+    remoteItems.map((item) => [backupItemKey(item), item])
+  );
   const keys = new Set([...localByKey.keys(), ...remoteByKey.keys()]);
   const changes: CloudBackupChange[] = [];
 

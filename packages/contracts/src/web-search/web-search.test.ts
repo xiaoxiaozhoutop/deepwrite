@@ -107,6 +107,16 @@ describe("web search settings", () => {
     );
   });
 
+  it("lets a provider that reads pages say how long an address may be", () => {
+    for (const descriptor of Object.values(WEB_SEARCH_PROVIDERS))
+      if (descriptor.supportsFetch)
+        expect(descriptor.fetchUrlMaxChars).toBeGreaterThan(0);
+    expect(WEB_SEARCH_PROVIDERS.deepseek).toMatchObject({
+      supportsFetch: true,
+      fetchUrlMaxChars: 8192
+    });
+  });
+
   it("checks limits and provider uniqueness", () => {
     expect(WebSearchSettingsSchema.safeParse(settings).success).toBe(true);
     for (const bad of [

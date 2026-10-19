@@ -1,6 +1,7 @@
-import { ref, type ComputedRef, type Ref } from "vue";
+import { ref, type ComputedRef } from "vue";
 import {
   webSearchProvider,
+  type WebSearchImportKeyInput,
   type WebSearchKeyImportCandidate,
   type WebSearchSettings
 } from "@deepwrite/contracts/renderer";
@@ -14,11 +15,11 @@ export interface WebSearchKeyImportRequest {
 }
 
 export interface WebSearchKeyImportContext {
-  settings: Ref<WebSearchSettings | null>;
   draft: WebSearchDraft;
   provider: ComputedRef<string>;
   canImport: ComputedRef<boolean>;
   resetKeyDraft(): void;
+  importKey(input: WebSearchImportKeyInput): Promise<void>;
 }
 
 /**
@@ -27,15 +28,17 @@ export interface WebSearchKeyImportContext {
  * the choice dialog.
  */
 export function useWebSearchKeyImport(context: WebSearchKeyImportContext) {
-  const { settings, draft } = context;
+  const { draft } = context;
   const importing = ref(false);
   const importRequest = ref<WebSearchKeyImportRequest | null>(null);
   const importConfirming = ref(false);
   /** A model that could lend its key exists while no key is saved. */
   const importHint = ref(false);
+  let detectionRevision = 0;
 
   /** Looks quietly for an importable model; the hint is optional. */
   async function detectImportable(snapshot: WebSearchSettings): Promise<void> {
+    const revision = ++detectionRevision;
     importHint.value = false;
     const providerId = snapshot.activeProviderId;
     const active = snapshot.profiles.find(
@@ -46,7 +49,8 @@ export function useWebSearchKeyImport(context: WebSearchKeyImportContext) {
       const { candidates } = await webSearchApi().listKeyImportCandidates({
         providerId
       });
-      importHint.value = candidates.length > 0;
+      if (revision === detectionRevision)
+        importHint.value = candidates.length > 0;
     } catch {
       // The import button still reports real failures.
     }
@@ -56,13 +60,17 @@ export function useWebSearchKeyImport(context: WebSearchKeyImportContext) {
   async function runImport(
     candidate: WebSearchKeyImportCandidate
   ): Promise<void> {
-    const snapshot = await webSearchApi().importKey({
+    const submitted = { ...draft };
+    await context.importKey({
       providerId: draft.activeProviderId,
       sourceModelId: candidate.sourceModelId
     });
-    settings.value = snapshot;
-    draft.activeProviderId = snapshot.activeProviderId;
-    context.resetKeyDraft();
+    if (
+      draft.activeProviderId === submitted.activeProviderId &&
+      draft.apiKey === submitted.apiKey &&
+      draft.clearKey === submitted.clearKey
+    )
+      context.resetKeyDraft();
     importHint.value = false;
     uiMessage.success(
       t("importDone", { model: candidate.models[0]?.label ?? "" })

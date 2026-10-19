@@ -209,6 +209,14 @@ export async function publishTagRelease({
     directory,
     draftOwner
   });
+  // Uploads may take minutes; recheck ownership and mutability at publication.
+  await getReleaseForUpload({
+    github,
+    repo,
+    tag,
+    releaseId: release.id,
+    draftOwner
+  });
   await assertTagCommit({ github, repo, tag, commit });
   const { data } = await github.rest.repos.updateRelease({
     ...repo,

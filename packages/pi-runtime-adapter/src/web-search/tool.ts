@@ -7,9 +7,10 @@ import {
 import { piStrictToolSampling } from "../pi-tool-schema";
 import { clipText, formatWebSearchResult } from "./format";
 import { WebSearchLimitError, type WebSearchSession } from "./session";
+import { WEB_SEARCH_TOOL_NAME } from "./tool-names";
 import { WebSearchProviderError } from "./types";
 
-export const WEB_SEARCH_TOOL_NAME = "web_search";
+export { WEB_SEARCH_TOOL_NAME };
 const QUESTION_MAX = 128;
 const DETAIL_SNIPPET_MAX = 300;
 

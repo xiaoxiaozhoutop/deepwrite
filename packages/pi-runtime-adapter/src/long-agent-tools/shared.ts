@@ -113,13 +113,14 @@ export function stableEntityId(prefix: string, seed: string): string {
   return `${prefix}_${stableHash(seed).slice(0, STABLE_ENTITY_ID_HEX_LENGTH)}`;
 }
 
-function allEntityIds(index: LongWorkspaceIndexSnapshot): Set<string> {
+export function allEntityIds(index: LongWorkspaceIndexSnapshot): Set<string> {
   return new Set([
     ...index.worldbuilding.map(({ id }) => id),
     ...index.worldbuilding.flatMap((category) =>
       category.format === "list" ? category.items.map(({ id }) => id) : []
     ),
     ...index.characters.map(({ id }) => id),
+    ...index.characterTypes.map(({ id }) => id),
     ...index.plot.volumes.map(({ id }) => id),
     ...index.plot.arcs.map(({ id }) => id),
     ...index.plot.chapterCards.map(({ id }) => id),

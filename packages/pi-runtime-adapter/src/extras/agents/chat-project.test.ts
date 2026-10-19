@@ -33,7 +33,11 @@ describe("project chat agent", () => {
     });
     const names = run.tools.map(({ name }) => name);
     expect(names).toEqual(
-      expect.arrayContaining(["web_search", "read_workspace_content"])
+      expect.arrayContaining([
+        "web_search",
+        "web_fetch",
+        "read_workspace_content"
+      ])
     );
     expect(run.systemPrompt).toContain("【联网搜索】");
     expect(run.systemPrompt).toContain(
@@ -41,6 +45,7 @@ describe("project chat agent", () => {
     );
     const without = buildConversationRun(chatProjectTask());
     expect(without.tools.map(({ name }) => name)).not.toContain("web_search");
+    expect(without.tools.map(({ name }) => name)).not.toContain("web_fetch");
   });
 
   it("locks short-project tools to the selected book and pages content", async () => {

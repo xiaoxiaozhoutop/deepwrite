@@ -2,7 +2,7 @@ const WRITING_TOOL_GUIDANCE = `本轮工具包括 read、create、edit、delete�
 
 const WRITING_MUTATION_GUIDANCE = `create 每次只创建一个对象，并可同时携带该对象的正式内容。人物创建必须跟随当前人物结构：文本样式下禁止 create character，应把全部人物写进同一份 character_overview，用 edit 写入；只有条目样式才用 kind=character 为单个人物创建独立条目。另外可创建动态剧情阶段 plot_stage，或正文小节 draft_section（含 body 与 character_state）。id 和排序由系统生成，不要自行指定。新增剧情阶段会改变短篇与剧本共享的全局结构定义，并只为当前作品建立该阶段正文；除非用户明确要求，不要轻率新增。
 
-edit 用于已有对象。空白对象可直接写 content；局部修改必须在完整读取后用 replacements 精确替换唯一原文；用户明确要求对目标全文进行内容重制、整篇重写或重新生成时，先完整 read，再在同一次 edit 中提交 content=重制后的完整正文、allow_overwrite_existing=true 和 summary。content 会替换全文，不能只传改动段落；清空非空正文同样要先完整读取并传 content=""、allow_overwrite_existing=true。用户已明确整体重制意图且目标范围清楚时，不要为覆盖参数重复询问；只有目标或重写范围不明确时才询问。若工具返回“未修改”或“未写入”，本次未生成提案，应根据返回说明修正参数后继续，不得当作修改完成。修改 draft_section 正文或人物状态时必须指定 document=body 或 character_state；只改小节标题的 meta 可不传 document。meta 只修改工具支持的结构字段，例如人物名称/归类、剧情阶段标题/说明、正文小节标题；不要用正文内容伪造结构变化。
+edit 用于已有对象。空白对象可直接写 content；局部修改必须在完整读取后用 replacements 精确替换唯一原文；用户明确要求对目标全文进行内容重制、整篇重写或重新生成时，先完整 read，再在同一次 edit 中提交 content=重制后的完整正文、allow_overwrite_existing=true 和 summary。content 会替换全文，不能只传改动段落；清空非空正文同样要先完整读取并传 content=""、allow_overwrite_existing=true。用户已明确整体重制意图且目标范围清楚时，不要为覆盖参数重复询问；只有目标或重写范围不明确时才询问。若工具返回“未修改”或“未写入”，本次未生成提案，应根据返回说明修正参数后继续，不得当作修改完成。修改 draft_section 正文或人物状态时必须指定 document=body 或 character_state。只改小节或剧集名称时，使用 edit({"kind":"draft_section","id":"<稳定小节 id>","meta":{"title":"新标题"}})，无需 document，也不要传 content 或 replacements。meta 只修改工具支持的结构字段，例如人物名称/归类、剧情阶段标题/说明、正文小节标题；不要用正文内容伪造结构变化。
 
 create、edit、delete 只生成提案，由用户审阅或客户端自动保存，具体以本轮【写入审批方式】为准；写入工具成功返回即表示这一步已完成，不要等待确认或重复提交。`;
 

@@ -47,7 +47,7 @@ describe("unified short workspace tools", () => {
       "kind=draft_section 修改正文或人物状态时必须同时给出 document=body 或 character_state"
     );
     expect(JSON.stringify(toolByName(tools, "read").parameters)).toContain(
-      "读取、写入或修改 draft_section 必须指定"
+      "读取、写入或修改 draft_section 的正文/人物状态时必须指定"
     );
     expect(JSON.stringify(toolByName(tools, "read").parameters)).toContain(
       "不传 document 时默认 body"

@@ -51,6 +51,7 @@ export default {
   moveCharacterEntry: "Move character entry",
   deleteCharacterFile: "Delete character file",
   webSearch: "Web search",
+  webFetch: "Read web page",
   write: "Write",
   edit: "Edit",
   couldNotGenerateManuscriptReview: "Could not generate manuscript review",

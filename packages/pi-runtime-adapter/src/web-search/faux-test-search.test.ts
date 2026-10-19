@@ -37,6 +37,35 @@ describe("Faux search client", () => {
   });
 });
 
+describe("Faux page reads", () => {
+  const context = {
+    apiKey: TEST_KEY,
+    baseUrl: "https://search.example.test",
+    fetch: vi.fn() as unknown as typeof fetch,
+    signal: new AbortController().signal
+  };
+  const read = (url: string) =>
+    fauxWebSearchClient.fetch!.page({ url }, context);
+
+  it("returns a fixed page for the address, without the network", async () => {
+    const page = await read("https://example.test/docs/a");
+    expect(page).toMatchObject({
+      title: "示例网页",
+      url: "https://example.test/docs/a"
+    });
+    expect(page.content).toContain("不来自真实网页");
+    expect(context.fetch).not.toHaveBeenCalled();
+  });
+
+  it("can fail with no content, or run past what the model reads", async () => {
+    await expect(read("https://example.test/no-content")).rejects.toMatchObject(
+      { kind: "no_content" }
+    );
+    const long = await read("https://example.test/long");
+    expect([...long.content].length).toBeGreaterThan(12_000);
+  });
+});
+
 describe("testWebSearchProvider", () => {
   const input = {
     providerId: "deepseek" as const,

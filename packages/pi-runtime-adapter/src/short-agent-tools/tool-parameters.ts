@@ -1,5 +1,6 @@
 import { SHORT_WORKSPACE_FILE_MAX_CHARACTERS } from "@deepwrite/contracts";
 import { Type } from "typebox";
+import { WRITING_DRAFT_SECTION_RENAME_GUIDANCE } from "../writing-edit-guidance";
 import { literalUnion } from "./schema";
 
 export const WRITING_TARGET_KINDS = [
@@ -9,7 +10,11 @@ export const WRITING_TARGET_KINDS = [
   "draft_section"
 ] as const;
 
-export const WRITING_READ_KINDS = [...WRITING_TARGET_KINDS, "draft"] as const;
+export const WRITING_READ_KINDS = [
+  ...WRITING_TARGET_KINDS,
+  "draft",
+  "workspace"
+] as const;
 
 export const WRITING_CREATE_KINDS = [
   "character",
@@ -23,10 +28,14 @@ export const stableWritingIdParameter = Type.String({
   minLength: 1,
   maxLength: 512,
   description:
-    "稳定业务 id。人物概览固定为 character_design，正文目录固定为 draft；其余 id 必须来自运行时索引、create 返回值或上一次 read。"
+    "稳定业务 id，不接受人名或标题。作品对象目录固定为 workspace，人物概览固定为 character_design，正文目录固定为 draft；其余 id 必须来自运行时索引、create 返回值或上一次 read。"
 });
 
 export const writingKindParameter = literalUnion(WRITING_TARGET_KINDS);
+export const writingEditKindParameter = literalUnion(WRITING_TARGET_KINDS, {
+  description:
+    "目标对象类型，建议显式提供。小节或剧集改名使用 draft_section。仅编辑小节正文/人物状态，或用 meta.title 修改已知小节名称时可省略；其他对象必须指定。"
+});
 export const writingReadKindParameter = literalUnion(WRITING_READ_KINDS);
 export const writingCreateKindParameter = literalUnion(WRITING_CREATE_KINDS, {
   description:
@@ -34,7 +43,7 @@ export const writingCreateKindParameter = literalUnion(WRITING_CREATE_KINDS, {
 });
 export const writingDocumentParameter = literalUnion(WRITING_DOCUMENTS, {
   description:
-    "仅 draft_section，或 kind=draft 且 include_all_sections=true 时使用：body 为正文，character_state 为人物状态。读取、写入或修改 draft_section 必须指定；其他 kind 不要传。"
+    "仅 draft_section，或 kind=draft 且 include_all_sections=true 时使用：body 为正文，character_state 为人物状态。读取、写入或修改 draft_section 的正文/人物状态时必须指定；edit 只用 meta.title 改名时可省略；其他 kind 不要传。"
 });
 
 export const writingContentParameter = Type.String({
@@ -104,7 +113,13 @@ export const writingEditMetaParameter = Type.Object(
     ),
     move: Type.Optional(literalUnion(["up", "down"] as const))
   },
-  { additionalProperties: false, minProperties: 1 }
+  {
+    additionalProperties: false,
+    minProperties: 1,
+    description:
+      "只修改结构字段，与 content、replacements 互斥。" +
+      WRITING_DRAFT_SECTION_RENAME_GUIDANCE
+  }
 );
 
 export const explicitTrueParameter = Type.Boolean({

@@ -15,7 +15,7 @@ type RequestContext =
 export function preparePromptContext(
   ctx: Context,
   api: DeepWriteApi,
-  activeDocument: WorkspaceDocument | null,
+  sourceDocument: WorkspaceDocument | null,
   workspaceDocuments: WorkspaceDocument[],
   attachments: WorkspaceContextAttachments,
   contextOverride: WorkspaceRuntimeContext | undefined,
@@ -23,6 +23,9 @@ export function preparePromptContext(
   sendEpoch: number,
   sendSessionId: string
 ): RequestContext | Promise<RequestContext> {
+  const activeDocument = sourceDocument
+    ? { ...sourceDocument, path: [...sourceDocument.path] }
+    : null;
   const originalLength = activeDocument?.content.length ?? 0;
   const snapshotContent =
     activeDocument &&
@@ -82,6 +85,9 @@ export function preparePromptContext(
     activeDocument.workspaceTitle &&
     activeDocument.stageId
   ) {
+    const documentSnapshots = workspaceDocuments.map((document) => ({
+      ...document
+    }));
     return (async () => {
       const { buildCreativeWorkspaceContext, loadWritingContextForPrompt } =
         await import("./creative-workspace-context");
@@ -89,7 +95,7 @@ export function preparePromptContext(
         return;
       const creativeContext = buildCreativeWorkspaceContext(
         activeDocument,
-        workspaceDocuments
+        documentSnapshots
       );
       if (creativeContext) {
         const agentsMd = await loadWritingContextForPrompt(

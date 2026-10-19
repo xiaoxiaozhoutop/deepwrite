@@ -1,28 +1,11 @@
+import { abortReason, defaultSleep } from "./abort";
+
 const IDLE_FORGET_MS = 60_000;
 const FORGET_THRESHOLD = 64;
-
-function abortReason(signal: AbortSignal): unknown {
-  return signal.reason ?? new DOMException("Aborted", "AbortError");
-}
 
 export interface WebSearchRateLimiterOptions {
   now?: () => number;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-}
-
-function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(abortReason(signal));
-  return new Promise((resolve, reject) => {
-    const abort = (): void => {
-      clearTimeout(timer);
-      reject(abortReason(signal!));
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", abort);
-      resolve();
-    }, ms);
-    signal?.addEventListener("abort", abort, { once: true });
-  });
 }
 
 /**

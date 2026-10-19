@@ -27,7 +27,17 @@ export function buildCreativeWorkspaceContext(
   )
     return undefined;
   const workspaceType = activeDocument.workspaceType;
-  const liveStages = workspaceDocuments.filter(
+  const currentDocument = workspaceDocuments.find(
+    (document) => document.id === activeDocument.id
+  );
+  // The editor may already have a newly saved body while the directory still
+  // carries metadata only. Both snapshots must use the same live document.
+  const liveStages = [
+    ...workspaceDocuments.filter(
+      (document) => document.id !== activeDocument.id
+    ),
+    { ...currentDocument, ...activeDocument }
+  ].filter(
     (document) =>
       document.workspaceType === workspaceType &&
       document.workspaceId === activeDocument.workspaceId &&

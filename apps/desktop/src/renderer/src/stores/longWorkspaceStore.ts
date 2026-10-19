@@ -1,5 +1,4 @@
 import {
-  createLongWorkspaceNavigationSnapshot,
   type LongApplyLegacySyncResult,
   type LongBookSummary,
   type LongCharacterGroup,
@@ -8,11 +7,13 @@ import {
   type LongFileId,
   type LongListBooksResult,
   type LongWorkspaceImpactConfirmation,
+  type LongWorkspaceIndexResult,
   type LongWorkspaceIndexSnapshot
 } from "@deepwrite/contracts";
 import { defineStore } from "pinia";
 import { computed, onScopeDispose, ref, shallowRef } from "vue";
 import type { ResourceTreeNode } from "../types/workspace";
+import { longWorkspaceSummaryFromIndex } from "../utils/longWorkspaceSummary";
 import {
   reconcileLongWorkspaceSelection,
   replaceLongBookSummary,
@@ -35,9 +36,7 @@ export interface LongWorkspaceRefreshStatus {
   readonly error: string | null;
 }
 
-export interface LongWorkspaceLoadPayload {
-  readonly bookId: string;
-  readonly workspaceIndex: LongWorkspaceIndexSnapshot;
+export interface LongWorkspaceLoadPayload extends Readonly<LongWorkspaceIndexResult> {
   readonly summary?: LongBookSummary;
 }
 
@@ -268,17 +267,7 @@ export const useLongWorkspaceStore = defineStore("longWorkspace", () => {
     payload: LongWorkspaceLoadPayload
   ): LongBookSummary {
     if (payload.summary) return payload.summary;
-    const current = activeBookSummary.value;
-    if (!current || current.id !== payload.bookId) {
-      throw new Error(
-        "Long workspace result does not include its book summary."
-      );
-    }
-    return {
-      ...current,
-      updatedAt: payload.workspaceIndex.updatedAt,
-      navigation: createLongWorkspaceNavigationSnapshot(payload.workspaceIndex)
-    };
+    return longWorkspaceSummaryFromIndex(payload, activeBookSummary.value);
   }
 
   function publishWorkspace(payload: LongWorkspaceLoadPayload): boolean {

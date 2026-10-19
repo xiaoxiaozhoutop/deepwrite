@@ -4,8 +4,7 @@ import type {
   ToolResultMessage
 } from "@earendil-works/pi-ai";
 import { rehydrateWorkspaceContext } from "./workspace-context-recovery";
-import { webSearchCompactor } from "./web-search/compactor";
-import { WEB_SEARCH_TOOL_NAME } from "./web-search/tool";
+import { WEB_TOOL_COMPACTORS } from "./web-search/compactor";
 import {
   headTail,
   textOf,
@@ -166,7 +165,7 @@ export const WORKSPACE_TOOL_COMPACTORS: Readonly<
   query_linked_material_entries: materialCompactor,
   ask_user_question: keepCompactor,
   spawn_subagent: subagentCompactor,
-  [WEB_SEARCH_TOOL_NAME]: webSearchCompactor,
+  ...WEB_TOOL_COMPACTORS,
   ...libraryCompactors("skill"),
   ...libraryCompactors("material")
 };

@@ -49,13 +49,25 @@ function deferred<T>() {
 }
 
 function makeApi(initial: WebSearchSettings = settings()) {
+  let snapshot = initial;
   return {
-    getSettings: vi.fn(async () => initial),
-    saveSettings: vi.fn(async (_input: WebSearchSettingsInput) => initial),
-    setEnabled: vi.fn(async ({ enabled }: { enabled: boolean }) => ({
-      ...initial,
-      enabled
-    })),
+    getSettings: vi.fn(async () => snapshot),
+    saveSettings: vi.fn(async (input: WebSearchSettingsInput) => {
+      snapshot = {
+        ...input,
+        profiles: input.profiles.map(({ apiKey, clearApiKey, ...profile }) => ({
+          ...profile,
+          hasApiKey: clearApiKey
+            ? false
+            : Boolean(apiKey) || Boolean(snapshot.profiles[0]?.hasApiKey)
+        }))
+      };
+      return snapshot;
+    }),
+    setEnabled: vi.fn(async ({ enabled }: { enabled: boolean }) => {
+      snapshot = { ...snapshot, enabled };
+      return snapshot;
+    }),
     test: vi.fn(async () => ({ resultCount: 3, elapsedMs: 1234, samples: [] })),
     listKeyImportCandidates: vi.fn(async () => ({
       candidates: [] as WebSearchKeyImportCandidate[],
@@ -135,12 +147,10 @@ describe("useWebSearchSettings switch", () => {
     reply.resolve(settings({ enabled: false }));
     await pending;
     expect(seen).toEqual([false]);
-    expect(messages()).toEqual([
-      { kind: "success", content: t("disabledToast") }
-    ]);
+    expect(messages()).toEqual([]);
   });
 
-  it("applies only the newest reply when toggled twice quickly", async () => {
+  it("serializes quick toggles while keeping the newest state visible", async () => {
     const first = deferred<WebSearchSettings>();
     const second = deferred<WebSearchSettings>();
     const api = makeApi();
@@ -150,10 +160,13 @@ describe("useWebSearchSettings switch", () => {
     const { controller } = await setup(api);
     const one = controller.setEnabled(false);
     const two = controller.setEnabled(true);
-    second.resolve(settings({ enabled: true }));
-    await two;
+    await vi.waitFor(() => expect(api.setEnabled).toHaveBeenCalledTimes(1));
     first.resolve(settings({ enabled: false }));
     await one;
+    expect(controller.settings.value?.enabled).toBe(true);
+    await vi.waitFor(() => expect(api.setEnabled).toHaveBeenCalledTimes(2));
+    second.resolve(settings({ enabled: true }));
+    await two;
     expect(controller.settings.value?.enabled).toBe(true);
   });
 
@@ -201,7 +214,10 @@ describe("useWebSearchSettings session switch status", () => {
 describe("useWebSearchSettings save", () => {
   it("sends only the edited provider with a typed key and then clears the draft key", async () => {
     const api = makeApi();
-    const saved = settings({ perRunCallLimit: 12 });
+    const saved = settings({
+      perRunCallLimit: 12,
+      profiles: [{ providerId: "deepseek", maxResults: 5, hasApiKey: true }]
+    });
     api.saveSettings.mockResolvedValue(saved);
     const { controller } = await setup(api);
     controller.draft.perRunCallLimit = 12;
@@ -219,14 +235,16 @@ describe("useWebSearchSettings save", () => {
     });
     expect(controller.draft.apiKey).toBe("");
     expect(controller.saving.value).toBe(false);
-    expect(messages()).toEqual([{ kind: "success", content: t("saved") }]);
+    expect(controller.dirty.value).toBe(false);
+    expect(messages()).toEqual([]);
   });
 
   it("asks to clear the saved key only when no new one is typed", async () => {
     const { api, controller } = await setup();
-    controller.toggleClearKey();
+    const pending = controller.clearKey();
     expect(controller.hasUsableKey.value).toBe(false);
-    await controller.save();
+    await pending;
+    expect(controller.profile.value?.hasApiKey).toBe(false);
     expect(api.saveSettings.mock.calls[0]![0].profiles[0]).toEqual({
       providerId: "deepseek",
       maxResults: 8,
@@ -260,6 +278,84 @@ describe("useWebSearchSettings save", () => {
     expect(messages()).toEqual([
       { kind: "error", content: "系统安全存储不可用" }
     ]);
+    api.saveSettings.mockResolvedValue(settings());
+    await controller.save();
+    expect(controller.draft.apiKey).toBe("");
+  });
+
+  it("saves edits made during a pending write without erasing the newer key", async () => {
+    const reply = deferred<WebSearchSettings>();
+    const api = makeApi();
+    api.saveSettings.mockReturnValueOnce(reply.promise);
+    const { controller } = await setup(api);
+    controller.draft.maxResults = 4;
+    controller.draft.apiKey = "invalid-first-key";
+    const first = controller.save();
+    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
+    controller.draft.maxResults = 6;
+    controller.draft.apiKey = "invalid-second-key";
+    const second = controller.save();
+    reply.resolve(
+      settings({
+        profiles: [{ providerId: "deepseek", maxResults: 4, hasApiKey: true }]
+      })
+    );
+    await Promise.all([first, second]);
+    expect(api.saveSettings).toHaveBeenCalledTimes(2);
+    expect(api.saveSettings.mock.calls[1]![0].profiles[0]).toEqual({
+      providerId: "deepseek",
+      maxResults: 6,
+      apiKey: "invalid-second-key"
+    });
+    expect(controller.draft.maxResults).toBe(6);
+    expect(controller.draft.apiKey).toBe("");
+    expect(controller.dirty.value).toBe(false);
+  });
+
+  it("keeps a newer switch intent while a parameter write is pending", async () => {
+    const reply = deferred<WebSearchSettings>();
+    const api = makeApi();
+    api.saveSettings.mockReturnValueOnce(reply.promise);
+    const { controller } = await setup(api);
+    controller.draft.maxResults = 4;
+    const first = controller.save();
+    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
+    const toggle = controller.setEnabled(false);
+    expect(controller.settings.value?.enabled).toBe(false);
+    expect(api.setEnabled).not.toHaveBeenCalled();
+    reply.resolve(settings());
+    await first;
+    expect(controller.settings.value?.enabled).toBe(false);
+    await toggle;
+    expect(controller.settings.value?.enabled).toBe(false);
+  });
+
+  it("persists a return to the original value while an earlier edit is saving", async () => {
+    const reply = deferred<WebSearchSettings>();
+    const api = makeApi();
+    api.saveSettings.mockReturnValueOnce(reply.promise);
+    const { controller } = await setup(api);
+    controller.draft.perRunCallLimit = 12;
+    const first = controller.save();
+    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
+    controller.draft.perRunCallLimit = 20;
+    const second = controller.save();
+    reply.resolve(settings({ perRunCallLimit: 12 }));
+    await Promise.all([first, second]);
+    expect(api.saveSettings).toHaveBeenCalledTimes(2);
+    expect(controller.settings.value?.perRunCallLimit).toBe(20);
+    expect(controller.dirty.value).toBe(false);
+  });
+
+  it("flushes a focused input when leaving and publishes its result to session switches", async () => {
+    const { api, controller, scope } = await setup(
+      makeApi(settings({}, false))
+    );
+    controller.draft.apiKey = "invalid-test-key";
+    scope.stop();
+    await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
+    expect(useWebSearchStatusStore().usable).toBe(true);
+    expect(controller.draft.apiKey).toBe("");
   });
 });
 
@@ -294,23 +390,31 @@ describe("useWebSearchSettings key import", () => {
     ]);
   });
 
-  it("imports a single model straight away when no key is saved, keeping unsaved parameters", async () => {
+  it("imports a single model without erasing newer key or parameter edits", async () => {
+    const reply = deferred<WebSearchSettings>();
     const api = makeApi(settings({}, false));
     api.listKeyImportCandidates.mockResolvedValue({
       candidates: [candidate("m_chat")],
       hasCurrentKey: false
     });
-    api.importKey.mockResolvedValue(settings());
+    api.importKey.mockReturnValue(reply.promise);
     const { controller } = await setup(api);
     controller.draft.maxResults = 4;
     controller.draft.apiKey = "invalid-test-typed-key";
-    await controller.startImport();
+    const pending = controller.startImport();
+    await vi.waitFor(() => expect(api.importKey).toHaveBeenCalledTimes(1));
+    controller.draft.apiKey = "invalid-newer-test-key";
+    reply.resolve(settings());
+    await pending;
     expect(api.importKey).toHaveBeenCalledWith({
       providerId: "deepseek",
       sourceModelId: "m_chat"
     });
     expect(controller.importRequest.value).toBeNull();
-    expect(controller.draft).toMatchObject({ maxResults: 4, apiKey: "" });
+    expect(controller.draft).toMatchObject({
+      maxResults: 4,
+      apiKey: "invalid-newer-test-key"
+    });
     expect(controller.profile.value?.hasApiKey).toBe(true);
     expect(controller.importing.value).toBe(false);
     expect(messages().at(-1)).toEqual({

@@ -275,6 +275,8 @@ export function useProposalCoordinator(context: ProposalCoordinatorContext) {
     api,
     catalogBook,
     loadCatalogSnapshot,
+    documents: () => documents.value,
+    applyAcceptedDocumentLocally: applyAcceptedAgentDocumentLocally,
     isCatalogConflict,
     isWorkspaceAccepting: (workspaceId) =>
       acceptingAgentEditWorkspaceIds.value.has(workspaceId),

@@ -28,6 +28,7 @@ describe("roleplay chat agent", () => {
     });
     expect(run.tools).toEqual([]);
     expect(run.systemPrompt).not.toContain("【联网搜索】");
+    expect(run.systemPrompt).not.toContain("web_fetch");
   });
 
   it("keeps role histories apart and refreshes an edited role on the next turn", async () => {

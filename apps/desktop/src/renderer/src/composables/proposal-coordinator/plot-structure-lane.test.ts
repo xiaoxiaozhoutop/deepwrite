@@ -7,10 +7,8 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import type { AgentEditProposal } from "../../types/conversation";
 import type { AgentConversationController } from "../useAgentConversation";
-import {
-  createPlotStructureProposalLane,
-  plotStructureCreationStageId
-} from "./plot-structure-lane";
+import { createPlotStructureProposalLane } from "./plot-structure-lane";
+import { plotStructureCreationStageId } from "./plot-structure-persistence";
 
 const NOW = "2026-08-30T00:00:00.000Z";
 const BOOK_ID = "book-plot-direct";
@@ -262,6 +260,13 @@ function createHarness(initialBook: Book, workspaceAccepting = false) {
     api: () => api,
     catalogBook: () => book,
     loadCatalogSnapshot,
+    documents: () =>
+      book.documents.map((document) => ({
+        id: document.id,
+        workspaceId: book.id,
+        catalogDocumentId: document.id
+      })),
+    applyAcceptedDocumentLocally: vi.fn(),
     isCatalogConflict: () => false,
     isWorkspaceAccepting: () => accepting,
     setWorkspaceAccepting,

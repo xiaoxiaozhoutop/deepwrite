@@ -1,6 +1,6 @@
 import { MATERIAL_METADATA_AUTHORING_GUIDANCE } from "@deepwrite/contracts";
 import { mainAgentHasWebSearch } from "./web-search/mount";
-import { WEB_SEARCH_PROMPT } from "./web-search/prompt";
+import { webSearchPromptForProvider } from "./web-search/prompt";
 import { buildWritingSystemPrompt } from "./prompts-writing";
 import type { AgentRunInput } from "./runtime-types";
 import { renderSubagentAuthoringSystemPrompt } from "./subagent-authoring-tools";
@@ -19,10 +19,14 @@ export function buildDeepWriteSystemPrompt(): string {
 
 function appendWorkspaceWebSearchPrompt(
   prompt: string,
-  webSearchEnabled: boolean
+  input: AgentRunInput
 ): string {
-  if (!webSearchEnabled) return prompt;
-  return [prompt, "", WEB_SEARCH_PROMPT].join("\n");
+  if (!input.webSearch || !mainAgentHasWebSearch(input)) return prompt;
+  return [
+    prompt,
+    "",
+    webSearchPromptForProvider(input.webSearch.providerId)
+  ].join("\n");
 }
 
 function buildWorkspaceAgentSystemPrompt(
@@ -83,6 +87,6 @@ export function buildEffectiveSystemPrompt(
 ): string {
   return appendWorkspaceWebSearchPrompt(
     buildWorkspaceAgentSystemPrompt(basePrompt, input),
-    mainAgentHasWebSearch(input)
+    input
   );
 }

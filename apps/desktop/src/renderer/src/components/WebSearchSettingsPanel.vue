@@ -21,12 +21,12 @@ const providerOptions = computed(() =>
   }))
 );
 const keyPlaceholder = computed(() =>
-  c.profile.value?.hasApiKey
+  c.profile.value?.hasApiKey && !draft.clearKey
     ? t("keyPlaceholderSaved")
     : t("keyPlaceholderEmpty")
 );
 const keyNote = computed(() =>
-  draft.clearKey ? t("keyWillClear") : c.keySourceText.value
+  draft.clearKey ? t("keyNotSaved") : c.keySourceText.value
 );
 
 onMounted(() => void c.load());
@@ -63,6 +63,7 @@ onMounted(() => void c.load());
           :model-value="draft.activeProviderId"
           :options="providerOptions"
           :accessible-label="t('provider')"
+          align="end"
           :disabled="!loaded"
           @update:model-value="
             c.selectProvider(
@@ -73,38 +74,38 @@ onMounted(() => void c.load());
         />
       </div>
 
-      <div class="settings-item web-search-row">
-        <span class="settings-item-text">
-          <strong>{{ t("apiKey") }}</strong>
-          <small>{{ keyNote }}</small>
-        </span>
-        <div class="web-search-key-control">
-          <input
-            v-model="draft.apiKey"
-            class="voice-input"
-            type="password"
-            autocomplete="off"
-            :aria-label="t('apiKey')"
-            :placeholder="keyPlaceholder"
-            :disabled="!loaded"
-            @input="draft.clearKey = false"
-          />
+      <div class="settings-item web-search-key-row">
+        <div class="web-search-key-heading">
+          <label class="settings-item-text" for="web-search-api-key">
+            <strong>{{ t("apiKey") }}</strong>
+          </label>
           <button
             v-if="c.profile.value?.hasApiKey"
-            class="voice-button"
-            :class="{ 'is-active': draft.clearKey }"
+            class="voice-text-button"
             type="button"
-            :aria-pressed="draft.clearKey"
-            :disabled="!loaded"
-            @click="c.toggleClearKey"
+            :disabled="!loaded || draft.clearKey"
+            @click="c.clearKey"
           >
             {{ t("clearKey") }}
           </button>
         </div>
-      </div>
-
-      <div class="settings-item web-search-row">
-        <div class="web-search-actions">
+        <input
+          id="web-search-api-key"
+          v-model="draft.apiKey"
+          class="voice-input web-search-key-input"
+          type="password"
+          autocomplete="off"
+          aria-describedby="web-search-key-source"
+          :placeholder="keyPlaceholder"
+          :disabled="!loaded"
+          @input="draft.clearKey = false"
+          @change="c.save()"
+          @keydown.enter="c.save()"
+        />
+        <small id="web-search-key-source" class="web-search-key-source">{{
+          keyNote
+        }}</small>
+        <div class="web-search-key-actions">
           <button
             v-if="c.canImport.value"
             class="voice-button"
@@ -156,6 +157,8 @@ onMounted(() => void c.load());
           :min="1"
           :max="c.limits.value.maxResults"
           :disabled="!loaded"
+          @change="c.save()"
+          @keydown.enter="c.save()"
         />
       </label>
       <label class="settings-item web-search-row">
@@ -177,19 +180,10 @@ onMounted(() => void c.load());
           :min="c.limits.value.minCalls"
           :max="c.limits.value.maxCalls"
           :disabled="!loaded"
+          @change="c.save()"
+          @keydown.enter="c.save()"
         />
       </label>
-    </div>
-
-    <div class="web-search-save-bar">
-      <button
-        class="voice-button is-primary"
-        type="button"
-        :disabled="!loaded || !c.dirty.value || c.saving.value"
-        @click="c.save"
-      >
-        {{ c.saving.value ? t("saving") : t("save") }}
-      </button>
     </div>
 
     <WebSearchKeyImportDialog
